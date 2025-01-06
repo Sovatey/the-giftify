@@ -75,8 +75,15 @@ WSGI_APPLICATION = 'API_TheGiftify.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'mssql',
+        'NAME': 'The_Giftify',
+        'USER': 'omr',
+        'PASSWORD': 'noch@@123456789',
+        'HOST': '192.168.137.1',  # e.g., 'your-server.database.windows.net' or 'localhost'
+        'PORT': '1433',  # Default SQL Server port
+        'OPTIONS': {
+            'driver': 'ODBC Driver 17 for SQL Server',
+        },
     }
 }
 
