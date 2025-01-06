@@ -1,4 +1,7 @@
 import { defineConfig } from '@umijs/max';
+import logo from './src/assets/images/logo.jpg';
+import icons from "@/.umi/plugin-layout/icons";
+import { message, Modal } from 'antd';
 
 export default defineConfig({
   antd: {},
@@ -7,7 +10,7 @@ export default defineConfig({
   initialState: {},
   request: {},
   layout: {
-    title: '@umijs/max',
+    title: 'The Giftify',
   },
   routes: [
     {
@@ -20,21 +23,39 @@ export default defineConfig({
       layout: false,
     },
     {
-      name: '首页',
+      name: 'Dashboard',
+      path: '/dashboard',
+      // component: './dashboard',
+      icon: 'DashboardOutlined',
+    },
+    {
+      name: 'Home',
       path: '/home',
       component: './Home',
+      icon: 'HomeOutlined',
     },
     {
-      name: '权限演示',
-      path: '/access',
-      component: './Access',
+      name: 'Inventory',
+      path: '/inventory',
+      // component: './inventory',
+      icon: 'InventoryOutlined',
     },
     {
-      name: ' CRUD 示例',
-      path: '/table',
-      component: './Table',
+      name: 'Logout',
+      path: '/logout',
+      // component: './inventory',
+      icon: 'LogoutOutlined',
     },
+    // {
+    //   name: 'Access',
+    //   path: '/access',
+    //   component: './Access',
+    // },
+    // {
+    //   name: ' Table',
+    //   path: '/table',
+    //   component: './Table',
+    // },
   ],
   npmClient: 'npm',
 });
-
