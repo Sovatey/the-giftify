@@ -1,52 +1,48 @@
 from datetime import datetime
 import json
-
+from rest_framework.authtoken.models import Token
+from rest_framework.response import Response
 from django.utils import timezone
 from django.db import transaction
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
 
-from API_TheGiftify.services import convertDateTimeToStringDateTime, deleteDocurmentFromMedia
+from API_TheGiftify.services import deleteDocurmentFromMedia
 from rest_framework import views, response, exceptions, status
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import F, Window
 from django.db.models.functions import RowNumber
 
+import logging
 from .serializers import UserGroupSerializer, UserRouteSerializer, UsersSerializer, UserPermissionSerializer
 from .models import User, UserGroup, UserPermission, UserRoutes
 from .services import create_user, create_user_token, get_user_by_token, clear_user_token
 
-
+logger = logging.getLogger(__name__)
 class RegisterUser(views.APIView):
-    def post(self, request): 
-        _data           = json.loads(request.data["data"])
+    def post(self, request):
         try:
-            
-            if (_data["email"] == "N/A"):
-                del _data["email"] 
-            if (request.FILES): 
-                file_obj = request.FILES['file']
-                _data["avatar"] = file_obj
+            username = request.data.get('username')
+            password = request.data.get('password')
+            email = request.data.get('email')
 
-            user33 = User.objects.filter(username=_data["username"])
-            if len(user33.values()) > 0:
-                raise exceptions.NotAcceptable("Username already exists.")
+            if not username or not password or not email:
+                raise exceptions.ValidationError("Username, password, and email are required")
 
-            serializer = UsersSerializer(data=_data)
-            if not serializer.is_valid(raise_exception=True): 
-                raise exceptions.NotAcceptable("dada")
+            if User.objects.filter(username=username).exists():
+                raise exceptions.ValidationError("Username already exists")
 
-            user = create_user(serializer.initial_data)
-            
-            # Broadcast To Outlets
-            if "avatar" in _data:
-                del _data["avatar"]
-            _data["ref_id"]                 =  user.id
-    
-            return response.Response({"detail": "success", "user": user.id}, status=status.HTTP_200_OK)
-        except Exception as err:
-            print(err)
-            raise err
+            user = User.objects.create(
+                username=username,
+                password=make_password(password),
+                email=email
+            )
+
+            return Response({"message": "User registered successfully"}, status=status.HTTP_201_CREATED)
+        except exceptions.ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": "An error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
       
     def put(self, request): 
         with transaction.atomic():
@@ -89,9 +85,6 @@ class RegisterUser(views.APIView):
                 transaction.set_rollback(True) 
                 raise err
         
-          
-
-
 class Login(views.APIView):
     authentication_classes = ()
     permission_classes = ()
@@ -114,7 +107,7 @@ class Login(views.APIView):
             #create token
             token = create_user_token(user)
             return response.Response(data={
-                "expiry"                : timezone.now() + timezone.timedelta(days=1), 
+                "expiry"                : timezone.now() + timezone.timedelta(hours=1), 
                 "token"                 : token, 
                 "id"                    : user.id,
                 "username"              : user.username,
@@ -136,8 +129,7 @@ class Login(views.APIView):
         except Exception as err: 
             print(err)
             raise err
-        
-        
+           
 class Logout(views.APIView):
     def post(self, request): 
         
@@ -157,41 +149,46 @@ class Logout(views.APIView):
 class GetUser(views.APIView):
     def get(self, request): 
         try: 
-            token = request.headers.get('Authorization').split(' ')[1]
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                raise exceptions.AuthenticationFailed("Authorization header missing")
+            
+            token_key = auth_header.split(' ')[1]
 
-            if not token: 
+            if not token_key: 
                 raise exceptions.AuthenticationFailed("Unauthorized access")
 
-            user = get_user_by_token(token)
+            try:
+                token = Token.objects.get(key=token_key)
+            except Token.DoesNotExist:
+                raise exceptions.AuthenticationFailed("Invalid token")
 
-            return response.Response(data={
+            user = token.user
+
+            return Response(data={
                 "data": {
-                    "name"              : user["name"], 
-                    "userid"            : user["id"],
-                    "avatar"            : settings.IMAGE_URL + user["avatar"] if user["avatar"] else None,
-                    "id"                : user["name"],
-                    "emp_id"            : user["emp_id"],
+                    "name"              : user.username, 
+                    "userid"            : user.id,
+                    "avatar"            : settings.IMAGE_URL + user.profile.avatar if user.profile.avatar else None,
+                    "id"                : user.username,
+                    "emp_id"            : user.profile.emp_id,
                     # "first_name"      : "sothea",
                     # "last_name"       : "loeung",
                     # "email"           : "sothea.loeung@onemoreresturant.com",
                     # "signature"       : 'string',
                     # "title"           : 'Sothea',
-                    # "group"           : 'admin',
-                    # "notifyCount"     : 2,
-                    # "unreadCount"     : 2,
-                    # "is_hr"           : 0, 
-                    "access"            : user["group_id"], 
-                    "access_outlet"     : user["access_outlet"],
-                    # "phone"         : "093381221",
-                },
-                "success": True
+                }
             })
-        except Exception as err: 
-            print(err)
-            raise err
-            
-        
-        
+        except exceptions.AuthenticationFailed as e:
+            logger.error(f"Authentication failed: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+        except KeyError as e:
+            logger.error(f"Key error: {str(e)}")
+            return Response({"error": "Invalid token or user data"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {str(e)}")
+            return Response({"error": "An error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)   
+           
 class UserSet(views.APIView):
     serializer_class = UsersSerializer
     
@@ -232,7 +229,6 @@ class UserSet(views.APIView):
         respo.data = data.data
         return respo
     
-    
 class UserRouteView(views.APIView):
     serializer_class = UserRouteSerializer
     
@@ -254,8 +250,7 @@ class UserRouteView(views.APIView):
         respo = response.Response()
         respo.data = serializer.data
         return respo    
-    
-    
+      
 class UserPermissionView(views.APIView):
     serializer_class = UserPermissionSerializer
     
@@ -310,8 +305,6 @@ class UserPermissionView(views.APIView):
             transaction.set_rollback(True)
         raise exceptions.ParseError("Can not update the data")
         
-    
-    
 class UserGroupView(views.APIView):
     serializer_class = UserGroupSerializer
     
