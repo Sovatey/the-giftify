@@ -1,20 +1,56 @@
-import { PageContainer } from '@ant-design/pro-components';
-import { Button, Form, Input, Typography, Card, message } from 'antd';
-import { useNavigate } from '@umijs/max';
-import logo from '../../assets/images/logo.jpg';
+import { login } from '@/services/login/api';
+import { history, useModel } from '@umijs/max';
+import { Button, Card, Form, Input, message, Typography } from 'antd';
+import { useState } from 'react';
+import { flushSync } from 'react-dom';
 import Snowfall from 'react-snowfall';
+import logo from '../../assets/images/logo.jpg';
 
 const Login: React.FC = () => {
-  const navigate = useNavigate();
+  const [userLoginState, setUserLoginState] = useState<API.LoginResult>({});
+  const [type, setType] = useState<string>('account');
+  const { initialState, setInitialState } = useModel('@@initialState');
+  const fetchUserInfo = async () => {
+    const userInfo = await initialState?.fetchUserInfo?.();
+    const userPermission = await initialState?.fetchUserPermission?.(
+      userInfo?.access || '0',
+    );
+    if (userInfo) {
+      flushSync(() => {
+        setInitialState((s: any) => ({
+          ...s,
+          currentUser: userInfo,
+          currentPermission: userPermission,
+        }));
+      });
+    }
+  };
+  const handleLogin = async (values: API.LoginParams) => {
+    try {
+      console.log(values);
 
-  const handleLogin = (values: { username: string; password: string }) => {
-    const { username, password } = values;
-
-    if (username === 'admin' && password === '123456') {
-      message.success('Login successful!');
-      navigate('/dashboard');
-    } else {
-      message.error('Invalid username or password!');
+      const msg = await login({ ...values, type });
+      console.log('Token:', msg.token);
+      if (msg.token) {
+        localStorage.setItem('accessToken', msg.token);
+        // const defaultLoginSuccessMessage = intl.formatMessage({
+        //   id: 'pages.login.success',
+        //   defaultMessage: 'login successful!',
+        // });
+        message.success('login successful!');
+        await fetchUserInfo();
+        const urlParams = new URL(window.location.href).searchParams;
+        history.push(urlParams.get('redirect') || '/');
+        return;
+      }
+      // 如果失败去设置用户错误信息
+      setUserLoginState(msg);
+    } catch (error) {
+      // const defaultLoginFailureMessage = intl.formatMessage({
+      //   id: 'pages.login.failure',
+      //   defaultMessage: 'Login failed, please try again!',
+      // });
+      message.error('Login failed, please try again!');
     }
   };
 
@@ -31,7 +67,7 @@ const Login: React.FC = () => {
       }}
     >
       {/* Snowfall Effect */}
-      <Snowfall snowflakeCount={200}  />
+      <Snowfall snowflakeCount={200} />
 
       {/* Container for Image and Login Card */}
       <div
@@ -79,7 +115,9 @@ const Login: React.FC = () => {
             <Form.Item
               label="Username"
               name="username"
-              rules={[{ required: true, message: 'Please enter your username!' }]}
+              rules={[
+                { required: true, message: 'Please enter your username!' },
+              ]}
             >
               <Input placeholder="Enter your username" />
             </Form.Item>
@@ -87,20 +125,29 @@ const Login: React.FC = () => {
             <Form.Item
               label="Password"
               name="password"
-              rules={[{ required: true, message: 'Please enter your password!' }]}
+              rules={[
+                { required: true, message: 'Please enter your password!' },
+              ]}
             >
               <Input.Password placeholder="Enter your password" />
             </Form.Item>
 
             <Form.Item>
-              <Button type="primary" htmlType="submit" style={{ width: '100%',backgroundColor:'#ffaead' }}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                style={{ width: '100%', backgroundColor: '#ffaead' }}
+              >
                 Log In
               </Button>
             </Form.Item>
           </Form>
           <div style={{ textAlign: 'center', marginTop: 16 }}>
             <Typography.Text type="secondary">
-              Don't have an account? <a href="/register" style={{color:'#ffaead'}}>Sign Up</a>
+              Don't have an account?{' '}
+              <a href="/register" style={{ color: '#ffaead' }}>
+                Sign Up
+              </a>
             </Typography.Text>
           </div>
         </Card>

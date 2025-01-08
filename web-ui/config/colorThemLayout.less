@@ -1,0 +1,122 @@
+// Header Config
+.ant-layout-header {
+  background-color: @token[primary] !important;
+  img {
+    height: 35px;
+  }
+  span,
+  h1 {
+    color: @token[textColorHeader];
+  }
+}
+
+.ant-layout-sider {
+  background-color: @token[sizeMenuBgColor] !important;
+  font-weight: 600;
+}
+
+.ant-pro-top-nav-header-logo {
+  h1 {
+    color: @token[textColorHeader] !important;
+  }
+  img {
+    height: 60px !important;
+    background-color: white;
+  }
+}
+
+.ant-pro-top-nav-header-logo {
+  h1 {
+    color: @token[textColorHeader] !important;
+  }
+  img {
+    height: 60px !important;
+    background-color: aliceblue;
+  }
+}
+
+.ant-menu {
+  transition-duration: 1s !important;
+  transition-timing-function: linear !important;
+  font-size: 16px;
+  .ant-menu-item-active {
+    background-color: @token[secondary] !important;
+  }
+  .ant-menu-item-selected {
+    background-color: @token[secondary] !important;
+    border-bottom: 3px solid white;
+    font-size: 18px;
+  }
+}
+
+.ant-page-header {
+  background-color: white;
+  box-shadow: rgba(0, 0, 0, 0.24) 0px 3px 8px;
+
+  .ant-page-header-heading {
+    justify-content: center;
+    .ant-page-header-heading-title {
+      font-size: 30px;
+    }
+  }
+}
+
+.ant-pro-setting-drawer-handle {
+  display: none;
+}
+
+.ant-page-header-heading {
+  display: none !important;
+}
+
+// Checkbox
+.ant-checkbox .ant-checkbox-inner {
+  width: 25px;
+  height: 25px;
+  margin: 0px;
+}
+
+.ant-checkbox.ant-checkbox-checked .ant-checkbox-inner::after {
+  width: 5px;
+  height: 11px;
+  top: 60%;
+  left: 24%;
+  transform: rotate(45deg) scale(2) translate(-50%, -50%);
+}
+
+.ant-checkbox.ant-checkbox-indeterminate .ant-checkbox-inner::after {
+  width: 24px;
+  height: 24px;
+  border-radius: 10%;
+}
+
+.ant-checkbox-wrapper::after {
+  line-height: 3;
+}
+
+.ant-checkbox-group span:nth-child(2) {
+  font-size: 16px;
+  padding-top: 14px;
+}
+
+// large
+.ant-checkbox-input-large .ant-checkbox-inner {
+  width: 40px;
+  height: 40px;
+  margin: 0px;
+}
+
+.ant-checkbox-input-large
+  .ant-checkbox.ant-checkbox-checked
+  .ant-checkbox-inner::after {
+  width: 5px;
+  height: 12px;
+  top: 65%;
+  left: 26.5%;
+  transform: rotate(45deg) scale(3) translate(-50%, -50%);
+}
+
+.ant-checkbox-input-large span:nth-child(2) {
+  font-size: 16px;
+  padding-top: 20px;
+}
