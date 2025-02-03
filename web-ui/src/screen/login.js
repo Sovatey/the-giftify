@@ -1,23 +1,65 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from 'react-router-dom';
-import { Button, Form, Input, Typography, Card, message } from 'antd';
+import { Button, Form, Input, Typography, Card, message,Modal } from 'antd';
 import Snowfall from 'react-snowfall';
 import logo from '../assets/images/logo.jpg';
-
+import axios from 'axios';
+import SignupModelForm from "./sign-up";
 
 const LoginScreen = () => {
   const navigate = useNavigate();
+  const [signupModel, setSignupModel] = useState(false)
+  const [loading, setLoading] = useState(false)
+  // const handleLogin = (values) => {
+  //   const { username, password } = values;
 
-  const handleLogin = (values) => {
-    const { username, password } = values;
+  //   if (username === 'admin' && password === '123456') {
+  //     message.success('Login successful!');
+  //     navigate('/dashboard');  // Navigate to dashboard after login
+  //   } else {
+  //     message.error('Invalid username or password!');
+  //   }
+  // };
 
-    if (username === 'admin' && password === '123456') {
-      message.success('Login successful!');
-      navigate('/dashboard');  // Navigate to dashboard after login
-    } else {
+  const handleLogin = async (values) => {
+    try {
+      const response = await axios.post(`/api/user/login/`, values);
+      if (response.status === 200) {
+        message.success('Login successful!');
+        localStorage.setItem('token', response.data.token);
+        navigate('/dashboard');
+      } else {
+        message.error('Invalid username or password!');
+      }
+    } catch (error) {
       message.error('Invalid username or password!');
     }
   };
+
+  const handleRegister = async (values) => {
+    Modal.confirm({
+      title: "Submit",
+      content: 'are you sure',
+      onOk: async () => {
+        try {
+          const response = await axios.post(`/api/user/register/`, values);
+          console.log(response)
+          if (response.status === 200) {
+            message.success('Register successful!');
+            setSignupModel(false)
+          } else {
+            message.error('Invalid');
+          }
+
+        } catch (error) {
+          console.log('ds')
+          message.error('Invalid');
+        }
+      }
+    })
+
+  };
+
   return (
     <div
       style={{
@@ -97,12 +139,30 @@ const LoginScreen = () => {
           </Form>
           <div style={{ textAlign: 'center', marginTop: 16 }}>
             <Typography.Text type="secondary">
-              Don't have an account? <a href="/register" style={{ color: '#ffaead' }}>Sign Up</a>
+              Don't have an account? <a onClick={() => setSignupModel(true)} style={{ color: '#ffaead' }}>Sign Up</a>
             </Typography.Text>
           </div>
         </Card>
       </div>
+      <SignupModelForm
+        title="Sign Up"
+        loading={loading}
+        open={signupModel}
+        setOpen={setSignupModel}
+        onSubmit={async (e) => {
+          try {
+            setLoading(true)
+            await handleRegister(e) // use await to get loading when submit
+          } catch (e) {
+
+          } finally {
+            setLoading(false);
+          }
+        }}
+        onCancel={() => setSignupModel(false)}
+      />
     </div>
+
   );
 };
 

@@ -2,8 +2,10 @@
   "name": "web-ui1",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://192.168.137.1:8168",
   "dependencies": {
     "antd": "^5.23.0",
+    "axios": "^1.7.9",
     "cra-template": "1.2.0",
     "leaflet": "^1.9.4",
     "react": "^19.0.0",

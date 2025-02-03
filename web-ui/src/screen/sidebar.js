@@ -27,7 +27,8 @@ const Sidebar = ({ username }) => {
 
     const handleMenuClick = ({ key }) => {
         if (key === "logout") {
-            navigate("/login");
+            localStorage.removeItem('token');
+            navigate('/');
         } else {
             navigate(key); // Navigate to the route corresponding to the key
         }
@@ -97,7 +98,7 @@ const Sidebar = ({ username }) => {
                 <Menu
                     mode="inline"
                     onClick={handleMenuClick}
-                    style={{backgroundColor:'#fff'}}
+                    style={{ backgroundColor: '#fff' }}
                     selectedKeys={[location.pathname]}
                 >
                     <Menu.Item key="/dashboard" icon={<LineChartOutlined />}>
@@ -113,22 +114,22 @@ const Sidebar = ({ username }) => {
                         User & Role
                     </Menu.Item>
                     <div
-                    style={{
-                        position: "absolute",
-                        bottom: "16px",
-                        width: "100%",
-                    }}
-                >
-                    <Menu
-                        mode="inline"
-                        onClick={handleMenuClick}
-                        style={{ backgroundColor: '#fff' }}
+                        style={{
+                            position: "absolute",
+                            bottom: "16px",
+                            width: "100%",
+                        }}
                     >
-                        <Menu.Item key="logout" icon={<LogoutOutlined />}>
-                            Logout
-                        </Menu.Item>
-                    </Menu>
-                </div>
+                        <Menu
+                            mode="inline"
+                            onClick={handleMenuClick}
+                            style={{ backgroundColor: '#fff' }}
+                        >
+                            <Menu.Item key="logout" icon={<LogoutOutlined />}>
+                                Logout
+                            </Menu.Item>
+                        </Menu>
+                    </div>
                 </Menu>
             </Sider>
         </ConfigProvider>

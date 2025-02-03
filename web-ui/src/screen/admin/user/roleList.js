@@ -6,64 +6,62 @@ const { Content } = Layout;
 
 const RoleList = () => {
     return (
-        <Layout style={{ minHeight: '100vh' }}>
-            <Layout >
-                <Content
-                    style={{
-                        padding: 24,
-                        margin: 0,
-                        minHeight: 280,
-                        background: '#fff',
-                    }}
-                >
-                    <Card>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-                            <Tooltip title="Add New Role">
-                                <Button
-                                    key="click-add"
-                                    type="link"
-                                    icon={<PlusOutlined />}
-                                    // onClick={() => setOpenModel(true)}
-                                />
-                            </Tooltip>
-                            <Tooltip title="Refresh">
-                                <Button
-                                    key="click-refresh"
-                                    type="link"
-                                    icon={<ReloadOutlined />}
-                                    style={{
-                                        color: 'black',
-                                    }}
-                                // onClick={() => onAddHandler()}
-                                />
-                            </Tooltip>
-                        </div>
-                        <Table
-                            columns={[
-                                {
-                                    title: 'No',
-                                    dataIndex: 'no',
-                                    render: (_, data, index) => { return index + 1 }
-                                },
-                                {
-                                    title: 'Name',
-                                    dataIndex: 'name',
-                                    key: 'name',
-                                },
-                                {
-                                    title: 'Created By',
-                                    dataIndex: 'created_by',
-                                    key: 'created_by',
-                                },
-                                {
-                                    title: 'Created Date',
-                                    dataIndex: 'created_date',
-                                    key: 'created_date',
-                                },
-                            ]} />
-                    </Card>
-                </Content>
-            </Layout>
+        <Layout >
+            <Content
+                style={{
+                    padding: 24,
+                    margin: 0,
+                    minHeight: 280,
+                    background: '#fff',
+                }}
+            >
+                <Card>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                        <Tooltip title="Add New Role">
+                            <Button
+                                key="click-add"
+                                type="link"
+                                icon={<PlusOutlined />}
+                            // onClick={() => setOpenModel(true)}
+                            />
+                        </Tooltip>
+                        <Tooltip title="Refresh">
+                            <Button
+                                key="click-refresh"
+                                type="link"
+                                icon={<ReloadOutlined />}
+                                style={{
+                                    color: 'black',
+                                }}
+                            // onClick={() => onAddHandler()}
+                            />
+                        </Tooltip>
+                    </div>
+                    <Table
+                        columns={[
+                            {
+                                title: 'No',
+                                dataIndex: 'no',
+                                render: (_, data, index) => { return index + 1 }
+                            },
+                            {
+                                title: 'Name',
+                                dataIndex: 'name',
+                                key: 'name',
+                            },
+                            {
+                                title: 'Created By',
+                                dataIndex: 'created_by',
+                                key: 'created_by',
+                            },
+                            {
+                                title: 'Created Date',
+                                dataIndex: 'created_date',
+                                key: 'created_date',
+                            },
+                        ]} />
+                </Card>
+            </Content>
         </Layout>
     );
 };

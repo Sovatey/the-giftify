@@ -8,7 +8,8 @@ const { Content } = Layout;
 const DashboardScreen = () => {
     const location = useLocation();
     const username = location.state;
-
+    const token = localStorage.getItem('token');
+    console.log('Stored Token:', token);
     return (
         <Layout style={{ minHeight: '100vh' }}>
             {<Sidebar username={username} />}

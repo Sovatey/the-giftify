@@ -10,12 +10,11 @@ const UserScreen = () => {
     return (
         <Layout style={{ minHeight: '100vh' }}>
             <Sidebar />
-            <Layout >
                 <Content
                     style={{
                         padding: 24,
                         margin: 0,
-                        minHeight: 280,
+                        // minHeight: 280,
                         background: '#fff',
                     }}
                 >
@@ -44,7 +43,6 @@ const UserScreen = () => {
                         />
                     </ConfigProvider>
                 </Content>
-            </Layout>
         </Layout>
     );
 };
