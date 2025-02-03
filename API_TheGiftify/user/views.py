@@ -36,9 +36,10 @@ class RegisterUser(views.APIView):
                 username=username,
                 password=make_password(password),
                 email=email
+                
             )
 
-            return Response({"message": "User registered successfully"}, status=status.HTTP_201_CREATED)
+            return Response({"message": "User registered successfully"}, status=200)
         except exceptions.ValidationError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -107,13 +108,13 @@ class Login(views.APIView):
             #create token
             token = create_user_token(user)
             return response.Response(data={
-                "expiry"                : timezone.now() + timezone.timedelta(hours=1), 
+                "expiry"                : timezone.now() + timezone.timedelta(hours=4), 
                 "token"                 : token, 
                 "id"                    : user.id,
                 "username"              : user.username,
                 "email"                 : user.email,
-                "first_name"            : user.first_name, 
-                "last_name"             : user.last_name, 
+                "name_kh"               : user.name_kh, 
+                "name"                  : user.name, 
                 "last_login"            : user.last_login, 
                 "last_ip_address"       : "",
                 "avatar"                : "", 
@@ -167,16 +168,20 @@ class GetUser(views.APIView):
 
             return Response(data={
                 "data": {
-                    "name"              : user.username, 
-                    "userid"            : user.id,
-                    "avatar"            : settings.IMAGE_URL + user.profile.avatar if user.profile.avatar else None,
-                    "id"                : user.username,
-                    "emp_id"            : user.profile.emp_id,
-                    # "first_name"      : "sothea",
-                    # "last_name"       : "loeung",
-                    # "email"           : "sothea.loeung@onemoreresturant.com",
-                    # "signature"       : 'string',
-                    # "title"           : 'Sothea',
+                    "userid"                : user.id,
+                    "username"              : user.username,
+                    "password"              : user.password,
+                    "email"                 : user.email,
+                    "name_kh"               : user.name_kh,
+                    "name"                  : user.name,
+                    "last_login"            : user.last_login,
+                    "last_ip_address"       : "",
+                    "avatar"                : "",
+                    "gender"                : 1,
+                    "group_id"              : user.group_id,
+                    "view_right"            : "",
+                    "edit_right"            : "",
+                    "allow_discount"        : False,
                 }
             })
         except exceptions.AuthenticationFailed as e:

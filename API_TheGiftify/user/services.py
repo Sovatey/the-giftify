@@ -8,8 +8,6 @@ def create_user(user_dc):
     instance = User(
         username                = user_dc["username"], 
         emp_id                  = user_dc["emp_id"],
-        first_name              = user_dc["name_kh"], 
-        last_name               = user_dc["name_kh"], 
         name_kh                 = user_dc["name_kh"], 
         name                    = user_dc["name"], 
         email                   = user_dc["email"] if 'email' in user_dc else "", 
