@@ -273,7 +273,7 @@ const FloatingDecorations = () => {
       ))}
 
       {/* Real Natural Grass Image Footer */}
-      {/* <AnimatedGrassFooter /> */}
+      <AnimatedGrassFooter />
 
       <style>{`
         /* 3D Flapping Wing Animations */
