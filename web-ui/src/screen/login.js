@@ -1,168 +1,159 @@
 import React, { useState } from "react";
-import { useNavigate } from 'react-router-dom';
-import { Button, Form, Input, Typography, Card, message,Modal } from 'antd';
-import Snowfall from 'react-snowfall';
-import logo from '../assets/images/logo.jpg';
-import axios from 'axios';
-import SignupModelForm from "./sign-up";
+import { Form, Input, Button, Card, Typography, Alert, Space, Tag } from "antd";
+import { UserOutlined, LockOutlined, HeartOutlined, KeyOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
+import Logo from "../assets/images/logo-round.png";
+import { useAuth } from "../context/AuthContext";
+
+const { Title, Text } = Typography;
 
 const LoginScreen = () => {
+  const [form] = Form.useForm();
+  const [errorMsg, setErrorMsg] = useState("");
+  const { login, loading } = useAuth();
   const navigate = useNavigate();
-  const [signupModel, setSignupModel] = useState(false)
-  const [loading, setLoading] = useState(false)
-  // const handleLogin = (values) => {
-  //   const { username, password } = values;
 
-  //   if (username === 'admin' && password === '123456') {
-  //     message.success('Login successful!');
-  //     navigate('/dashboard');  // Navigate to dashboard after login
-  //   } else {
-  //     message.error('Invalid username or password!');
-  //   }
-  // };
-
-  const handleLogin = async (values) => {
-    try {
-      const response = await axios.post(`/api/user/login/`, values);
-      if (response.status === 200) {
-        message.success('Login successful!');
-        localStorage.setItem('token', response.data.token);
-        navigate('/dashboard');
+  const onFinish = async (values) => {
+    setErrorMsg("");
+    const res = await login(values.username, values.password);
+    if (res.success) {
+      if (res.role === "Cashier") {
+        navigate("/pos");
       } else {
-        message.error('Invalid username or password!');
+        navigate("/dashboard");
       }
-    } catch (error) {
-      message.error('Invalid username or password!');
+    } else {
+      setErrorMsg(res.error || "Login failed. Please check credentials.");
     }
   };
 
-  const handleRegister = async (values) => {
-    Modal.confirm({
-      title: "Submit",
-      content: 'are you sure',
-      onOk: async () => {
-        try {
-          const response = await axios.post(`/api/user/register/`, values);
-          console.log(response)
-          if (response.status === 200) {
-            message.success('Register successful!');
-            setSignupModel(false)
-          } else {
-            message.error('Invalid');
-          }
-
-        } catch (error) {
-          console.log('ds')
-          message.error('Invalid');
-        }
-      }
-    })
-
+  const handleQuickLogin = (user, pass) => {
+    form.setFieldsValue({ username: user, password: pass });
+    onFinish({ username: user, password: pass });
   };
 
   return (
     <div
       style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        background: 'linear-gradient(to bottom, #e0f7fa, #ffffff)',
-        position: 'relative',
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "linear-gradient(135deg, #fff0f3 0%, #f3e8ff 50%, #e0f2fe 100%)",
+        padding: "20px",
       }}
     >
-      <Snowfall snowflakeCount={200} />
-
-      <div
+      <Card
+        className="glass-card"
         style={{
-          display: 'flex',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          borderRadius: '10px',
-          overflow: 'hidden',
+          width: "100%",
+          maxWidth: "420px",
+          padding: "24px 16px",
+          borderRadius: "24px",
+          border: "1px solid rgba(255, 255, 255, 0.9)",
+          boxShadow: "0 15px 35px -5px rgba(255, 174, 173, 0.35)",
         }}
       >
-        <div
-          style={{
-            width: 300,
-            backgroundColor: '#f0f8ff',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
+        <div style={{ textAlign: "center", marginBottom: "24px" }}>
           <img
-            src={logo}
-            alt="Login Illustration"
+            src={Logo}
+            alt="The Giftify Logo"
             style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
+              width: "75px",
+              height: "75px",
+              marginBottom: "12px",
+              filter: "drop-shadow(0 6px 12px rgba(255, 117, 140, 0.3))",
             }}
           />
+          <Title level={2} style={{ color: "#4a2e35", margin: 0, fontWeight: 800 }}>
+            The Giftify <HeartOutlined style={{ color: "#ff758c" }} />
+          </Title>
+          <Text style={{ color: "#8c6a74", fontSize: "14px", fontWeight: 600 }}>
+            Point of Sale & Stock System
+          </Text>
         </div>
-        <Card
-          style={{
-            width: 400,
-            padding: '24px',
-          }}
-          bordered={false}
-        >
-          <Typography.Title level={3} style={{ textAlign: 'center' }}>
-            Login
-          </Typography.Title>
-          <Form
-            layout="vertical"
-            onFinish={handleLogin}
-            initialValues={{ username: '', password: '' }}
+
+        {errorMsg && (
+          <Alert
+            message={errorMsg}
+            type="error"
+            showIcon
+            style={{ marginBottom: "20px", borderRadius: "12px" }}
+          />
+        )}
+
+        <Form form={form} name="login" onFinish={onFinish} layout="vertical" size="large">
+          <Form.Item
+            name="username"
+            rules={[{ required: true, message: "Please enter your username!" }]}
           >
-            <Form.Item
-              label="Username"
-              name="username"
-              rules={[{ required: true, message: 'Please enter your username!' }]}
+            <Input
+              prefix={<UserOutlined style={{ color: "#ff758c" }} />}
+              placeholder="Username"
+              style={{ borderRadius: "14px" }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="password"
+            rules={[{ required: true, message: "Please enter your password!" }]}
+          >
+            <Input.Password
+              prefix={<LockOutlined style={{ color: "#ff758c" }} />}
+              placeholder="Password"
+              style={{ borderRadius: "14px" }}
+            />
+          </Form.Item>
+
+          <Form.Item style={{ marginTop: "24px" }}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              loading={loading}
+              className="btn-girly"
+              style={{
+                height: "46px",
+                fontSize: "16px",
+                letterSpacing: "0.5px",
+              }}
             >
-              <Input placeholder="Enter your username" />
-            </Form.Item>
+              Sign In to POS
+            </Button>
+          </Form.Item>
+        </Form>
 
-            <Form.Item
-              label="Password"
-              name="password"
-              rules={[{ required: true, message: 'Please enter your password!' }]}
+        {/* Demo Quick Logins for fast testing */}
+        <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px dashed #ffaead" }}>
+          <Text style={{ fontSize: "12px", color: "#8c6a74", fontWeight: 700, display: "block", marginBottom: "8px", textAlign: "center" }}>
+            <KeyOutlined /> Demo Quick Login Accounts:
+          </Text>
+          <Space style={{ display: "flex", justifyContent: "center", flexWrap: "wrap" }}>
+            <Tag
+              color="magenta"
+              style={{ cursor: "pointer", borderRadius: "12px", padding: "4px 10px", fontWeight: 700 }}
+              onClick={() => handleQuickLogin("admin", "admin123")}
             >
-              <Input.Password placeholder="Enter your password" />
-            </Form.Item>
-
-            <Form.Item>
-              <Button type="primary" htmlType="submit" style={{ width: '100%', backgroundColor: '#ffaead' }}>
-                Log In
-              </Button>
-            </Form.Item>
-          </Form>
-          <div style={{ textAlign: 'center', marginTop: 16 }}>
-            <Typography.Text type="secondary">
-              Don't have an account? <a onClick={() => setSignupModel(true)} style={{ color: '#ffaead' }}>Sign Up</a>
-            </Typography.Text>
-          </div>
-        </Card>
-      </div>
-      <SignupModelForm
-        title="Sign Up"
-        loading={loading}
-        open={signupModel}
-        setOpen={setSignupModel}
-        onSubmit={async (e) => {
-          try {
-            setLoading(true)
-            await handleRegister(e) // use await to get loading when submit
-          } catch (e) {
-
-          } finally {
-            setLoading(false);
-          }
-        }}
-        onCancel={() => setSignupModel(false)}
-      />
+              Admin
+            </Tag>
+            <Tag
+              color="purple"
+              style={{ cursor: "pointer", borderRadius: "12px", padding: "4px 10px", fontWeight: 700 }}
+              onClick={() => handleQuickLogin("manager", "manager123")}
+            >
+              Manager
+            </Tag>
+            <Tag
+              color="cyan"
+              style={{ cursor: "pointer", borderRadius: "12px", padding: "4px 10px", fontWeight: 700 }}
+              onClick={() => handleQuickLogin("cashier", "cashier123")}
+            >
+              Cashier
+            </Tag>
+          </Space>
+        </div>
+      </Card>
     </div>
-
   );
 };
 

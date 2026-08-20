@@ -1,48 +1,49 @@
 import React from "react";
-import { Layout, Divider, Tabs, ConfigProvider } from 'antd';
+import { Layout, Tabs, Card } from 'antd';
 import Sidebar from '../../sidebar';
-import UserList from "./userList";
-import RoleList from "./roleList";
+import UserList from './userList';
+import RoleList from './roleList';
+import { UserOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 
 const { Content } = Layout;
 
 const UserScreen = () => {
+    const tabItems = [
+        {
+            key: '1',
+            label: (
+                <span style={{ fontWeight: 700 }}>
+                    <UserOutlined style={{ color: '#ff758c', marginRight: '6px' }} /> Staff User Accounts
+                </span>
+            ),
+            children: <UserList />
+        },
+        {
+            key: '2',
+            label: (
+                <span style={{ fontWeight: 700 }}>
+                    <SafetyCertificateOutlined style={{ color: '#c084fc', marginRight: '6px' }} /> Role & Permission Matrix
+                </span>
+            ),
+            children: <RoleList />
+        }
+    ];
+
     return (
-        <Layout style={{ minHeight: '100vh' }}>
+        <Layout style={{ minHeight: '100vh', background: 'var(--bg-gradient)' }}>
             <Sidebar />
-                <Content
-                    style={{
-                        padding: 24,
-                        margin: 0,
-                        // minHeight: 280,
-                        background: '#fff',
-                    }}
-                >
-                    <h2>User & Role</h2>
-                    <Divider />
-                    <ConfigProvider
-                        theme={{
-                            token: {
-                                colorPrimary: "#ffaead", // Set your primary color for active tabs
-                            },
-                        }}
-                    >
-                        <Tabs
-                            items={[
-                                {
-                                    label: 'User',
-                                    key: '1',
-                                    children: <UserList />,
-                                },
-                                {
-                                    label: 'Role',
-                                    key: '2',
-                                    children: <RoleList />,
-                                },
-                            ]}
-                        />
-                    </ConfigProvider>
+            <Layout style={{ background: 'transparent' }}>
+                <Content style={{ padding: 24, margin: 0 }}>
+                    <div style={{ marginBottom: '16px' }}>
+                        <h2 style={{ margin: 0, color: '#4a2e35', fontWeight: 800 }}>User & Role Permission Management</h2>
+                        <span style={{ color: '#8c6a74', fontSize: '13px' }}>Manage staff credentials and fine-grained function access</span>
+                    </div>
+
+                    <Card className="glass-card">
+                        <Tabs defaultActiveKey="1" items={tabItems} />
+                    </Card>
                 </Content>
+            </Layout>
         </Layout>
     );
 };

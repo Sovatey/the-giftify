@@ -2,8 +2,9 @@
   "name": "web-ui1",
   "version": "0.1.0",
   "private": true,
-  "proxy": "http://192.168.137.1:8168",
+  "proxy": "http://127.0.0.1:8000",
   "dependencies": {
+    "@rive-app/react-canvas": "^4.31.0",
     "antd": "^5.23.0",
     "axios": "^1.7.9",
     "cra-template": "1.2.0",

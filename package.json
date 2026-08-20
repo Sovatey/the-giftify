@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "@ant-design/icons": "^5.5.2",
-    "@umijs/plugin-locale": "^0.16.0",
-    "react-snowfall": "^2.2.0"
-  }
-}

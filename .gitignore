@@ -1,5 +1,18 @@
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
+# Dependencies
+node_modules/
+
+# Python Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+
+# OS metadata
+.DS_Store
+Thumbs.db
