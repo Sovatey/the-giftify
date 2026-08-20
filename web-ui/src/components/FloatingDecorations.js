@@ -178,60 +178,6 @@ const IridescentButterfly3D = ({ scale = 0.45, speed = '0.3s', type = 'crystal' 
 };
 
 // Photorealistic Natural Grass Footer Layer with Multiply Blending & Organic Wind Physics
-const AnimatedGrassFooter = () => {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        width: '100vw',
-        height: '95px',
-        pointerEvents: 'none',
-        zIndex: 9998,
-        overflow: 'hidden'
-      }}
-    >
-      {/* Background Natural Grass Layer */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: '-5%',
-          width: '110vw',
-          height: '85px',
-          backgroundImage: 'url(/real_natural_grass.png)',
-          backgroundRepeat: 'repeat-x',
-          backgroundSize: 'cover',
-          backgroundPosition: 'bottom center',
-          mixBlendMode: 'multiply',
-          opacity: 0.85,
-          transformOrigin: '50% 100%',
-          animation: 'swayGrassNatural1 4.5s ease-in-out infinite alternate'
-        }}
-      />
-
-      {/* Foreground Natural Grass Layer (Shifted for Real Density) */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: '5%',
-          width: '110vw',
-          height: '95px',
-          backgroundImage: 'url(/real_natural_grass.png)',
-          backgroundRepeat: 'repeat-x',
-          backgroundSize: 'cover',
-          backgroundPosition: 'bottom center',
-          mixBlendMode: 'multiply',
-          opacity: 0.95,
-          transformOrigin: '50% 100%',
-          animation: 'swayGrassNatural2 3.2s ease-in-out infinite alternate'
-        }}
-      />
-    </div>
-  );
-};
 
 const FloatingDecorations = () => {
   // Smaller 3D Butterfly Configs (delicate & cute)
@@ -273,7 +219,6 @@ const FloatingDecorations = () => {
       ))}
 
       {/* Real Natural Grass Image Footer */}
-      <AnimatedGrassFooter />
 
       <style>{`
         /* 3D Flapping Wing Animations */
