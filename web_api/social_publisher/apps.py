@@ -6,10 +6,8 @@ class SocialPublisherConfig(AppConfig):
     name = 'social_publisher'
 
     def ready(self):
-        # Prevent scheduler from starting twice during Django dev server reloads
-        if os.environ.get('RUN_MAIN') == 'true' or not os.environ.get('DJANGO_SETTINGS_MODULE'):
-            try:
-                from .scheduler import start_scheduler
-                start_scheduler()
-            except Exception as e:
-                print(f"[SocialPublisher] Scheduler init notice: {e}")
+        try:
+            from .scheduler import start_scheduler
+            start_scheduler()
+        except Exception as e:
+            print(f"[SocialPublisher] Scheduler init notice: {e}")

@@ -19,7 +19,8 @@ def check_and_publish_due_posts():
         from .models import SocialPost
         from .publishers import PublisherEngine
 
-        now = timezone.now()
+        # Use timezone.localtime to get actual user timezone (e.g. Asia/Phnom_Penh GMT+7)
+        now = timezone.localtime(timezone.now())
         current_date = now.date()
         current_time = now.time()
         
@@ -46,7 +47,7 @@ def check_and_publish_due_posts():
         )
 
         for post in recurring_posts:
-            already_ran_today = post.last_published_at and post.last_published_at.date() == current_date
+            already_ran_today = post.last_published_at and timezone.localtime(post.last_published_at).date() == current_date
             if not already_ran_today:
                 post_time = post.daily_time
                 if (current_time.hour > post_time.hour) or \
@@ -64,7 +65,7 @@ def check_and_publish_due_posts():
         for post in weekly_posts:
             days = post.recurring_days or []
             if today_code in days or now.weekday() in days:
-                already_ran_today = post.last_published_at and post.last_published_at.date() == current_date
+                already_ran_today = post.last_published_at and timezone.localtime(post.last_published_at).date() == current_date
                 if not already_ran_today:
                     post_time = post.daily_time
                     if (current_time.hour > post_time.hour) or \

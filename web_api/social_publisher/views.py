@@ -169,9 +169,10 @@ class SocialPostViewSet(viewsets.ModelViewSet):
 
         if post.schedule_type == 'IMMEDIATE':
             PublisherEngine.publish_post(post)
-        elif post.schedule_type in ['ONE_TIME', 'DAILY_RECURRING']:
+        elif post.schedule_type in ['ONE_TIME', 'DAILY_RECURRING', 'WEEKLY_RECURRING']:
             post.status = 'SCHEDULED'
             post.save()
+
 
         headers = self.get_success_headers(serializer.data)
         return Response(self.get_serializer(post).data, status=status.HTTP_201_CREATED, headers=headers)
@@ -185,9 +186,15 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         post = serializer.save()
 
+        if post.schedule_type in ['ONE_TIME', 'DAILY_RECURRING', 'WEEKLY_RECURRING']:
+            post.status = 'SCHEDULED'
+            post.last_published_at = None
+            post.save()
+
         self._process_multi_attachments(request, post)
 
         return Response(self.get_serializer(post).data)
+
 
     @action(detail=True, methods=['post'], url_path='publish-now')
     def publish_now(self, request, pk=None):
