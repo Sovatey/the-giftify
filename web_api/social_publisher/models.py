@@ -79,6 +79,8 @@ class SocialPost(models.Model):
 
     # Store selected platforms list e.g. ["facebook", "telegram", "tiktok"]
     platforms = models.JSONField(default=list, help_text="Array of target platform names")
+    account_ids = models.JSONField(default=list, blank=True, null=True, help_text="Array of target SocialAccount IDs e.g. [1, 2, 5]")
+
     
     schedule_type = models.CharField(max_length=20, choices=SCHEDULE_TYPE_CHOICES, default='IMMEDIATE')
     scheduled_at = models.DateTimeField(blank=True, null=True, help_text="For ONE_TIME scheduled posts")

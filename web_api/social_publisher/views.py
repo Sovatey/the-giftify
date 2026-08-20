@@ -156,7 +156,14 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             except Exception:
                 data['recurring_days'] = [data['recurring_days']]
 
+        if isinstance(data.get('account_ids'), str):
+            try:
+                data['account_ids'] = json.loads(data['account_ids'])
+            except Exception:
+                data['account_ids'] = [data['account_ids']]
+
         return data
+
 
 
     def create(self, request, *args, **kwargs):

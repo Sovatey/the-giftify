@@ -376,23 +376,36 @@ class TikTokPublisher:
 class PublisherEngine:
     @classmethod
     def publish_post(cls, post: SocialPost):
-        target_platforms = post.platforms or []
-        if not target_platforms:
-            return {'success': False, 'message': 'No platforms selected for post'}
+        target_accounts = []
+        
+        # 1. If specific account_ids were selected, fetch those exact SocialAccounts
+        if post.account_ids:
+            target_accounts = list(SocialAccount.objects.filter(id__in=post.account_ids, is_active=True))
+
+        # 2. Fallback to platform-based matching if account_ids is empty
+        if not target_accounts:
+            target_platforms = post.platforms or []
+            if not target_platforms:
+                return {'success': False, 'message': 'No platforms or accounts selected for post'}
+
+            for platform in target_platforms:
+                account = SocialAccount.objects.filter(platform=platform, is_active=True).first()
+                if not account:
+                    account = SocialAccount.objects.create(
+                        platform=platform,
+                        name=f"Default {platform.capitalize()} Account (Simulation)",
+                        is_simulated=True,
+                        is_active=True
+                    )
+                target_accounts.append(account)
+
+        if not target_accounts:
+            return {'success': False, 'message': 'No active social accounts found'}
 
         overall_success = False
 
-        for platform in target_platforms:
-            account = SocialAccount.objects.filter(platform=platform, is_active=True).first()
-
-            if not account:
-                account = SocialAccount.objects.create(
-                    platform=platform,
-                    name=f"Default {platform.capitalize()} Account (Simulation)",
-                    is_simulated=True,
-                    is_active=True
-                )
-
+        for account in target_accounts:
+            platform = account.platform
             if platform == 'facebook':
                 result = FacebookPublisher.publish(account, post)
             elif platform == 'telegram':
@@ -405,7 +418,7 @@ class PublisherEngine:
             status_str = 'SUCCESS' if result['success'] else 'FAILED'
             SocialPostLog.objects.create(
                 post=post,
-                platform=platform,
+                platform=f"{platform} ({account.name})",
                 status=status_str,
                 message=result['message'],
                 external_post_id=result.get('external_id')
@@ -417,10 +430,11 @@ class PublisherEngine:
         post.last_published_at = timezone.now()
         if post.schedule_type == 'ONE_TIME':
             post.status = 'PUBLISHED' if overall_success else 'FAILED'
-        elif post.schedule_type == 'DAILY_RECURRING':
-            post.status = 'PUBLISHED'
+        elif post.schedule_type in ['DAILY_RECURRING', 'WEEKLY_RECURRING']:
+            post.status = 'SCHEDULED'
         elif post.schedule_type == 'IMMEDIATE':
             post.status = 'PUBLISHED' if overall_success else 'FAILED'
 
         post.save()
         return {'success': overall_success, 'post_id': post.id}
+

@@ -10,7 +10,7 @@ import {
   ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined,
   ReloadOutlined, DeleteOutlined, EditOutlined, ShareAltOutlined,
   UploadOutlined, VideoCameraOutlined, PictureOutlined, KeyOutlined,
-  CalendarOutlined, FireOutlined
+  CalendarOutlined, FireOutlined, UserOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import Sidebar from '../sidebar';
@@ -180,7 +180,16 @@ const SocialPublisherScreen = () => {
       formData.append('tiktok_post_type', values.tiktok_post_type || 'PHOTO_CAROUSEL');
       formData.append('telegram_post_type', values.telegram_post_type || 'PHOTO');
 
-      const platformsArr = values.platforms || [];
+      // Specific Account IDs
+      const selectedAccIds = values.account_ids || [];
+      formData.append('account_ids', JSON.stringify(selectedAccIds));
+
+      // Synchronize platforms list from selected accounts or fall back
+      let platformsArr = values.platforms || [];
+      if (selectedAccIds.length > 0) {
+        const targetAccObjects = accounts.filter(a => selectedAccIds.includes(a.id));
+        platformsArr = Array.from(new Set(targetAccObjects.map(a => a.platform)));
+      }
       formData.append('platforms', JSON.stringify(platformsArr));
 
       const recurringDaysArr = values.recurring_days || [];
@@ -239,7 +248,7 @@ const SocialPublisherScreen = () => {
   // Immediate Publish Now Button
   const handlePublishNow = async (postId) => {
     try {
-      message.loading({ content: 'Publishing across selected platforms...', key: 'publish' });
+      message.loading({ content: 'Publishing across selected accounts...', key: 'publish' });
       const res = await api.post(`/social/posts/${postId}/publish-now/`);
       if (res.data.success) {
         message.success({ content: 'Published successfully!', key: 'publish' });
@@ -347,28 +356,55 @@ const SocialPublisherScreen = () => {
     message.success(`Selected ${selectedProds.length} store items for post!`);
   };
 
-  // Render Platform Tags
-  const renderPlatformBadges = (record) => {
+  // Render Platform & Specific Account Badges with Responsive Truncation
+  const renderAccountBadges = (record, isCompact = false) => {
+    const accIds = record.account_ids || [];
+    if (accIds.length > 0) {
+      const targetedAccs = accounts.filter(a => accIds.includes(a.id));
+      if (targetedAccs.length > 0) {
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '100%' }}>
+            {targetedAccs.map(acc => {
+              const color = acc.platform === 'facebook' ? '#1877F2' : acc.platform === 'telegram' ? '#229ED9' : '#000000';
+              const icon = acc.platform === 'facebook' ? <FacebookOutlined /> : acc.platform === 'telegram' ? <SendOutlined /> : <ShareAltOutlined />;
+              const label = acc.name;
+              return (
+                <Tooltip title={`${acc.name} (${acc.page_id_or_chat_id || acc.platform})`} key={acc.id}>
+                  <Tag
+                    icon={icon}
+                    color={color}
+                    style={{
+                      borderRadius: 12,
+                      maxWidth: '180px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      marginRight: 0,
+                      fontSize: '11px',
+                      lineHeight: '18px',
+                      fontWeight: 600
+                    }}
+                  >
+                    {label}
+                  </Tag>
+                </Tooltip>
+              );
+            })}
+          </div>
+        );
+      }
+    }
+
+
+    // Fallback to platform list badges
     const platformArray = record.platforms || [];
     if (!platformArray || platformArray.length === 0) return <Tag>None</Tag>;
     return (
-      <Space size={[0, 4]} wrap>
-        {platformArray.includes('facebook') && (
-          <Tag icon={<FacebookOutlined />} color="#1877F2" style={{ borderRadius: 12 }}>
-            Facebook
-          </Tag>
-        )}
-        {platformArray.includes('telegram') && (
-          <Tag icon={<SendOutlined />} color="#229ED9" style={{ borderRadius: 12 }}>
-            Telegram
-          </Tag>
-        )}
-        {platformArray.includes('tiktok') && (
-          <Tag icon={<ShareAltOutlined />} color="#000000" style={{ borderRadius: 12 }}>
-            TikTok
-          </Tag>
-        )}
-      </Space>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '100%' }}>
+        {platformArray.includes('facebook') && <Tag icon={<FacebookOutlined />} color="#1877F2" style={{ borderRadius: 12, fontSize: 11 }}>Facebook</Tag>}
+        {platformArray.includes('telegram') && <Tag icon={<SendOutlined />} color="#229ED9" style={{ borderRadius: 12, fontSize: 11 }}>Telegram</Tag>}
+        {platformArray.includes('tiktok') && <Tag icon={<ShareAltOutlined />} color="#000000" style={{ borderRadius: 12, fontSize: 11 }}>TikTok</Tag>}
+      </div>
     );
   };
 
@@ -416,9 +452,9 @@ const SocialPublisherScreen = () => {
       }
     },
     {
-      title: 'Target Platforms',
-      key: 'platforms',
-      render: (_, record) => renderPlatformBadges(record)
+      title: 'Target Accounts',
+      key: 'accounts',
+      render: (_, record) => renderAccountBadges(record, false)
     },
     {
       title: 'Schedule Mode & Days',
@@ -519,6 +555,7 @@ const SocialPublisherScreen = () => {
               setEditingPost(record);
               postForm.setFieldsValue({
                 ...record,
+                account_ids: record.account_ids || [],
                 scheduled_at: record.scheduled_at ? dayjs(record.scheduled_at) : null,
                 daily_time: record.daily_time ? dayjs(record.daily_time, 'HH:mm:ss') : null,
               });
@@ -542,13 +579,13 @@ const SocialPublisherScreen = () => {
       render: (val) => dayjs(val).format('YYYY-MM-DD HH:mm:ss')
     },
     {
-      title: 'Platform',
+      title: 'Target Channel / Account',
       dataIndex: 'platform',
       key: 'platform',
       render: (val) => {
-        if (val === 'facebook') return <Tag icon={<FacebookOutlined />} color="#1877F2">Facebook</Tag>;
-        if (val === 'telegram') return <Tag icon={<SendOutlined />} color="#229ED9">Telegram</Tag>;
-        return <Tag color="#000000">TikTok</Tag>;
+        if (val.includes('facebook')) return <Tag icon={<FacebookOutlined />} color="#1877F2">{val}</Tag>;
+        if (val.includes('telegram')) return <Tag icon={<SendOutlined />} color="#229ED9">{val}</Tag>;
+        return <Tag color="#000000">{val}</Tag>;
       }
     },
     {
@@ -577,17 +614,17 @@ const SocialPublisherScreen = () => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#fdfbfb' }}>
       <Sidebar />
-      <Layout style={{ padding: '24px 32px', background: 'transparent' }}>
+      <Layout style={{ padding: '20px 24px', background: 'transparent', maxWidth: '100%', overflowX: 'hidden' }}>
         <Content>
           {/* Header Banner */}
           <div
             style={{
               background: 'linear-gradient(135deg, #ffffff 0%, #fff0f3 50%, #f3e8ff 100%)',
-              padding: '24px 28px',
+              padding: '20px 24px',
               borderRadius: '20px',
               border: '1px solid rgba(255, 174, 173, 0.3)',
               boxShadow: '0 8px 24px rgba(255, 174, 173, 0.12)',
-              marginBottom: '24px',
+              marginBottom: '20px',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
@@ -596,11 +633,11 @@ const SocialPublisherScreen = () => {
             }}
           >
             <div>
-              <h1 style={{ margin: 0, color: '#4a2e35', fontSize: '26px', fontWeight: 800 }}>
+              <h1 style={{ margin: 0, color: '#4a2e35', fontSize: '24px', fontWeight: 800 }}>
                 Social Media Auto-Poster <ShareAltOutlined style={{ color: '#ff758c' }} />
               </h1>
-              <p style={{ margin: '6px 0 0 0', color: '#7a5a63', fontSize: '14px', fontWeight: 600 }}>
-                Weekly Content Calendar & Auto-Posting loop. Schedule item A on Mondays, item B on Tuesdays, or multi-posts per day! 🗓️
+              <p style={{ margin: '4px 0 0 0', color: '#7a5a63', fontSize: '13px', fontWeight: 600 }}>
+                Target specific Telegram Groups, Facebook Pages, or TikTok accounts individually with custom schedules! 🚀
               </p>
             </div>
             <Space wrap>
@@ -631,9 +668,11 @@ const SocialPublisherScreen = () => {
                   setImageFileList([]);
                   setVideoFileList([]);
                   setSelectedProductIds([]);
+                  const defaultAccIds = accounts.map(a => a.id);
                   postForm.setFieldsValue({
                     schedule_type: 'WEEKLY_RECURRING',
                     recurring_days: ['MON'],
+                    account_ids: defaultAccIds,
                     platforms: ['facebook', 'telegram', 'tiktok'],
                     fb_post_type: 'FEED',
                     tiktok_post_type: 'PHOTO_CAROUSEL',
@@ -650,46 +689,45 @@ const SocialPublisherScreen = () => {
           </div>
 
           {/* Quick Stats Grid */}
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+          <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
             <Col xs={24} sm={12} md={6}>
               <Card style={{ borderRadius: 16, border: '1px solid rgba(255,174,173,0.3)', background: 'white' }}>
                 <Statistic
-                  title={<span style={{ fontWeight: 600, color: '#666' }}>Connected Channels</span>}
+                  title={<span style={{ fontWeight: 600, color: '#666', fontSize: 12 }}>Connected Channels</span>}
                   value={accounts.length}
                   prefix={<SettingOutlined style={{ color: '#ff758c' }} />}
-                  valueStyle={{ color: '#4a2e35', fontWeight: 800 }}
+                  valueStyle={{ color: '#4a2e35', fontWeight: 800, fontSize: 22 }}
                 />
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
               <Card style={{ borderRadius: 16, border: '1px solid rgba(255,174,173,0.3)', background: 'white' }}>
                 <Statistic
-                  title={<span style={{ fontWeight: 600, color: '#666' }}>Active Recurring Schedules</span>}
+                  title={<span style={{ fontWeight: 600, color: '#666', fontSize: 12 }}>Active Schedules</span>}
                   value={recurringCount}
                   prefix={<SyncOutlined spin style={{ color: '#e67e22' }} />}
-                  valueStyle={{ color: '#d35400', fontWeight: 800 }}
-                  suffix={<span style={{ fontSize: 12, color: '#888' }}>(Weekly / Daily)</span>}
+                  valueStyle={{ color: '#d35400', fontWeight: 800, fontSize: 22 }}
                 />
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
               <Card style={{ borderRadius: 16, border: '1px solid rgba(255,174,173,0.3)', background: 'white' }}>
                 <Statistic
-                  title={<span style={{ fontWeight: 600, color: '#666' }}>One-Time Scheduled</span>}
+                  title={<span style={{ fontWeight: 600, color: '#666', fontSize: 12 }}>One-Time Scheduled</span>}
                   value={scheduledCount}
                   prefix={<ClockCircleOutlined style={{ color: '#3498db' }} />}
-                  valueStyle={{ color: '#2980b9', fontWeight: 800 }}
+                  valueStyle={{ color: '#2980b9', fontWeight: 800, fontSize: 22 }}
                 />
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
               <Card style={{ borderRadius: 16, border: '1px solid rgba(255,174,173,0.3)', background: 'white' }}>
                 <Statistic
-                  title={<span style={{ fontWeight: 600, color: '#666' }}>Publish Success Rate</span>}
+                  title={<span style={{ fontWeight: 600, color: '#666', fontSize: 12 }}>Publish Success</span>}
                   value={successRate}
                   suffix="%"
                   prefix={<CheckCircleOutlined style={{ color: '#2ecc71' }} />}
-                  valueStyle={{ color: '#27ae60', fontWeight: 800 }}
+                  valueStyle={{ color: '#27ae60', fontWeight: 800, fontSize: 22 }}
                 />
               </Card>
             </Col>
@@ -700,7 +738,8 @@ const SocialPublisherScreen = () => {
             style={{
               borderRadius: 20,
               boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
-              border: '1px solid rgba(255, 174, 173, 0.3)'
+              border: '1px solid rgba(255, 174, 173, 0.3)',
+              overflow: 'hidden'
             }}
           >
             <Tabs
@@ -712,11 +751,11 @@ const SocialPublisherScreen = () => {
                   label: <span><CalendarOutlined /> Weekly Content Calendar Planner</span>,
                   children: (
                     <div>
-                      <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                         <div>
                           <h3 style={{ margin: 0, color: '#4a2e35', fontWeight: 800 }}>🗓️ 7-Day Weekly Content Calendar</h3>
-                          <p style={{ margin: 0, color: '#888', fontSize: 13 }}>
-                            Visual weekly queue. Items set on each day repeat every single week automatically ("Infinite Loop").
+                          <p style={{ margin: 0, color: '#888', fontSize: 12 }}>
+                            Scroll horizontally to view all 7 days. Each column displays posts assigned to that day!
                           </p>
                         </div>
                         <Button
@@ -729,9 +768,11 @@ const SocialPublisherScreen = () => {
                             setImageFileList([]);
                             setVideoFileList([]);
                             setSelectedProductIds([]);
+                            const defaultAccIds = accounts.map(a => a.id);
                             postForm.setFieldsValue({
                               schedule_type: 'WEEKLY_RECURRING',
                               recurring_days: ['MON'],
+                              account_ids: defaultAccIds,
                               platforms: ['facebook', 'telegram', 'tiktok'],
                               fb_post_type: 'FEED',
                               tiktok_post_type: 'PHOTO_CAROUSEL',
@@ -746,116 +787,147 @@ const SocialPublisherScreen = () => {
                         </Button>
                       </div>
 
-                      {/* 7 Columns Weekly Grid */}
-                      <Row gutter={[12, 12]}>
+                      {/* Fully Responsive 7-Day Scrollable Grid */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          overflowX: 'auto',
+                          gap: '14px',
+                          paddingBottom: '16px',
+                          scrollBehavior: 'smooth',
+                          WebkitOverflowScrolling: 'touch'
+                        }}
+                      >
                         {DAYS_OF_WEEK.map((day) => {
                           const dayPosts = getPostsForDay(day.value);
                           return (
-                            <Col xs={24} sm={12} md={8} lg={3} key={day.value} style={{ minWidth: 160, flex: 1 }}>
+                            <div
+                              key={day.value}
+                              style={{
+                                flex: '0 0 220px',
+                                minWidth: '220px',
+                                background: '#ffffff',
+                                borderRadius: 16,
+                                border: `2px solid ${day.color}33`,
+                                minHeight: 420,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+                              }}
+                            >
+                              {/* Header Day Title */}
                               <div
                                 style={{
-                                  background: '#ffffff',
-                                  borderRadius: 16,
-                                  border: `2px solid ${day.color}33`,
-                                  minHeight: 380,
+                                  background: `linear-gradient(135deg, ${day.color} 0%, ${day.color}dd 100%)`,
+                                  color: 'white',
+                                  padding: '10px 14px',
+                                  borderRadius: '14px 14px 0 0',
+                                  textAlign: 'center',
+                                  fontWeight: 800,
+                                  fontSize: 14,
                                   display: 'flex',
-                                  flexDirection: 'column'
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center'
                                 }}
                               >
-                                {/* Header Day Title */}
-                                <div
-                                  style={{
-                                    background: `linear-gradient(135deg, ${day.color} 0%, ${day.color}dd 100%)`,
-                                    color: 'white',
-                                    padding: '10px 12px',
-                                    borderRadius: '14px 14px 0 0',
-                                    textAlign: 'center',
-                                    fontWeight: 800,
-                                    fontSize: 14,
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center'
-                                  }}
-                                >
-                                  <span>{day.label}</span>
-                                  <Badge count={dayPosts.length} style={{ backgroundColor: 'white', color: day.color, fontWeight: 800 }} />
-                                </div>
-
-                                {/* Posts Container */}
-                                <div style={{ padding: 8, flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                  {dayPosts.length === 0 ? (
-                                    <div style={{ textAlign: 'center', padding: '30px 4px', color: '#ccc', fontSize: 12 }}>
-                                      No posts set for {day.label}
-                                    </div>
-                                  ) : (
-                                    dayPosts.map((p) => (
-                                      <Card
-                                        key={p.id}
-                                        size="small"
-                                        style={{
-                                          borderRadius: 12,
-                                          border: '1px solid #ffe4e6',
-                                          boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
-                                          background: '#fff9fa'
-                                        }}
-                                      >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                          <Tag color="gold" style={{ fontSize: 10, borderRadius: 8, fontWeight: 700 }}>
-                                            ⏰ {p.daily_time || '09:00'}
-                                          </Tag>
-                                          {renderPlatformBadges(p)}
-                                        </div>
-
-                                        <div style={{ fontWeight: 700, color: '#4a2e35', fontSize: 13, marginBottom: 2 }}>
-                                          {p.title}
-                                        </div>
-
-                                        <div style={{ fontSize: 11, color: '#777', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 8 }}>
-                                          {p.content}
-                                        </div>
-
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                          <Tooltip title="Post Immediately Now">
-                                            <Button
-                                              type="primary"
-                                              size="small"
-                                              icon={<ThunderboltOutlined />}
-                                              style={{ background: '#ff758c', borderColor: '#ff758c', fontSize: 11, borderRadius: 6 }}
-                                              onClick={() => handlePublishNow(p.id)}
-                                            >
-                                              Post Now
-                                            </Button>
-                                          </Tooltip>
-
-                                          <Space size={2}>
-                                            <Button
-                                              size="small"
-                                              type="text"
-                                              icon={<EditOutlined />}
-                                              onClick={() => {
-                                                setEditingPost(p);
-                                                postForm.setFieldsValue({
-                                                  ...p,
-                                                  scheduled_at: p.scheduled_at ? dayjs(p.scheduled_at) : null,
-                                                  daily_time: p.daily_time ? dayjs(p.daily_time, 'HH:mm:ss') : null,
-                                                });
-                                                setIsPostModalOpen(true);
-                                              }}
-                                            />
-                                            <Popconfirm title="Delete?" onConfirm={() => handleDeletePost(p.id)}>
-                                              <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-                                            </Popconfirm>
-                                          </Space>
-                                        </div>
-                                      </Card>
-                                    ))
-                                  )}
-                                </div>
+                                <span>{day.label}</span>
+                                <Badge count={dayPosts.length} style={{ backgroundColor: 'white', color: day.color, fontWeight: 800 }} />
                               </div>
-                            </Col>
+
+                              {/* Posts Container */}
+                              <div style={{ padding: '10px', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {dayPosts.length === 0 ? (
+                                  <div style={{ textAlign: 'center', padding: '40px 4px', color: '#ccc', fontSize: 12 }}>
+                                    No posts set for {day.label}
+                                  </div>
+                                ) : (
+                                  dayPosts.map((p) => (
+                                    <div
+                                      key={p.id}
+                                      style={{
+                                        background: '#ffffff',
+                                        borderRadius: 14,
+                                        border: '1.5px solid #ffe4e6',
+                                        boxShadow: '0 4px 12px rgba(255, 117, 140, 0.06)',
+                                        padding: '12px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '8px'
+                                      }}
+                                    >
+                                      {/* Header row: Time & Status */}
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Tag color="gold" style={{ fontSize: 11, borderRadius: 8, fontWeight: 700, margin: 0, padding: '1px 8px' }}>
+                                          ⏰ {p.daily_time || '09:00'}
+                                        </Tag>
+                                        <Tag color={p.status === 'PUBLISHED' ? 'green' : 'processing'} style={{ fontSize: 10, borderRadius: 6, margin: 0 }}>
+                                          {p.status}
+                                        </Tag>
+                                      </div>
+
+                                      {/* Target Channel Pills */}
+                                      <div>
+                                        {renderAccountBadges(p, true)}
+                                      </div>
+
+                                      {/* Post Title */}
+                                      <div style={{ fontWeight: 800, color: '#4a2e35', fontSize: 13, lineHeight: '18px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                        {p.title}
+                                      </div>
+
+                                      <div style={{ fontSize: 11, color: '#777', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {p.content}
+                                      </div>
+
+                                      {/* Action Buttons Row */}
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 8, borderTop: '1px dashed #ffe4e6' }}>
+                                        <Button
+                                          type="primary"
+                                          size="small"
+                                          icon={<ThunderboltOutlined />}
+                                          style={{
+                                            background: 'linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)',
+                                            border: 'none',
+                                            fontSize: 11,
+                                            borderRadius: 8,
+                                            fontWeight: 700,
+                                            boxShadow: '0 2px 6px rgba(255,117,140,0.3)',
+                                            padding: '0 8px'
+                                          }}
+                                          onClick={() => handlePublishNow(p.id)}
+                                        >
+                                          Post Now
+                                        </Button>
+
+                                        <Space size={2}>
+                                          <Button
+                                            size="small"
+                                            type="text"
+                                            icon={<EditOutlined style={{ color: '#4a2e35' }} />}
+                                            onClick={() => {
+                                              setEditingPost(p);
+                                              postForm.setFieldsValue({
+                                                ...p,
+                                                account_ids: p.account_ids || [],
+                                                scheduled_at: p.scheduled_at ? dayjs(p.scheduled_at) : null,
+                                                daily_time: p.daily_time ? dayjs(p.daily_time, 'HH:mm:ss') : null,
+                                              });
+                                              setIsPostModalOpen(true);
+                                            }}
+                                          />
+                                          <Popconfirm title="Delete?" onConfirm={() => handleDeletePost(p.id)}>
+                                            <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                                          </Popconfirm>
+                                        </Space>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
                           );
                         })}
-                      </Row>
+                      </div>
                     </div>
                   )
                 },
@@ -868,6 +940,7 @@ const SocialPublisherScreen = () => {
                       dataSource={posts}
                       rowKey="id"
                       loading={loading}
+                      scroll={{ x: 800 }}
                       pagination={{ pageSize: 8 }}
                     />
                   )
@@ -879,7 +952,7 @@ const SocialPublisherScreen = () => {
                     <div>
                       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <p style={{ margin: 0, color: '#666' }}>
-                          Configure Facebook Page tokens, Telegram Bot tokens, and TikTok API tokens. Simulated mode enables full testing without network errors.
+                          Add multiple Telegram Groups, Facebook Pages, or TikTok accounts. Each account can be targeted independently!
                         </p>
                         <Button
                           type="primary"
@@ -888,7 +961,7 @@ const SocialPublisherScreen = () => {
                           onClick={() => {
                             setEditingAccount(null);
                             accountForm.resetFields();
-                            accountForm.setFieldsValue({ platform: 'facebook', is_active: true, is_simulated: true });
+                            accountForm.setFieldsValue({ platform: 'telegram', is_active: true, is_simulated: false });
                             setIsAccountModalOpen(true);
                           }}
                         >
@@ -907,31 +980,39 @@ const SocialPublisherScreen = () => {
                           </Col>
                         ) : (
                           accounts.map((acc) => (
-                            <Col xs={24} sm={12} md={8} key={acc.id}>
+                            <Col xs={24} sm={12} md={12} lg={8} xl={6} key={acc.id}>
                               <Card
                                 title={
-                                  <Space>
-                                    {acc.platform === 'facebook' && <FacebookOutlined style={{ color: '#1877F2', fontSize: 20 }} />}
-                                    {acc.platform === 'telegram' && <SendOutlined style={{ color: '#229ED9', fontSize: 20 }} />}
-                                    {acc.platform === 'tiktok' && <ShareAltOutlined style={{ color: '#000', fontSize: 20 }} />}
-                                    <span>{acc.name}</span>
-                                  </Space>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '170px', overflow: 'hidden' }}>
+                                    {acc.platform === 'facebook' && <FacebookOutlined style={{ color: '#1877F2', fontSize: 18, flexShrink: 0 }} />}
+                                    {acc.platform === 'telegram' && <SendOutlined style={{ color: '#229ED9', fontSize: 18, flexShrink: 0 }} />}
+                                    {acc.platform === 'tiktok' && <ShareAltOutlined style={{ color: '#000', fontSize: 18, flexShrink: 0 }} />}
+                                    <Tooltip title={acc.name}>
+                                      <span style={{ fontWeight: 700, color: '#4a2e35', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14 }}>
+                                        {acc.name}
+                                      </span>
+                                    </Tooltip>
+                                  </div>
                                 }
                                 extra={
-                                  <Tag color={acc.is_active ? 'green' : 'red'}>
+                                  <Tag color={acc.is_active ? 'green' : 'red'} style={{ margin: 0, borderRadius: 8 }}>
                                     {acc.is_active ? 'Active' : 'Inactive'}
                                   </Tag>
                                 }
-                                style={{ borderRadius: 16, border: '1px solid #ffe4e6' }}
+                                style={{ borderRadius: 16, border: '1px solid #ffe4e6', boxShadow: '0 4px 14px rgba(0,0,0,0.02)' }}
                               >
                                 <div style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>
-                                  <div><strong>Platform:</strong> {acc.platform_display || acc.platform}</div>
-                                  <div><strong>Target ID:</strong> {acc.page_id_or_chat_id || 'Not set'}</div>
-                                  <div>
+                                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <strong>Platform:</strong> {acc.platform_display || acc.platform}
+                                  </div>
+                                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <strong>Target ID:</strong> {acc.page_id_or_chat_id || 'Not set'}
+                                  </div>
+                                  <div style={{ marginTop: 4 }}>
                                     <strong>Mode:</strong> {acc.is_simulated ? (
-                                      <Tag color="orange">Simulated Test Mode</Tag>
+                                      <Tag color="orange" style={{ borderRadius: 6, fontSize: 11 }}>Simulated Test Mode</Tag>
                                     ) : (
-                                      <Tag color="green">Live API Mode</Tag>
+                                      <Tag color="green" style={{ borderRadius: 6, fontSize: 11 }}>Live API Mode</Tag>
                                     )}
                                   </div>
                                 </div>
@@ -941,27 +1022,28 @@ const SocialPublisherScreen = () => {
                                     block
                                     type="primary"
                                     icon={<KeyOutlined />}
-                                    style={{ marginBottom: 10, borderRadius: 8, background: '#000000', borderColor: '#000000' }}
+                                    style={{ marginBottom: 10, borderRadius: 8, background: '#000000', borderColor: '#000000', fontSize: 12 }}
                                     onClick={() => startTikTokOAuth(acc.app_id_or_bot_token)}
                                   >
-                                    🔑 1-Click Auto Authenticate with TikTok
+                                    🔑 Connect TikTok (OAuth)
                                   </Button>
                                 )}
 
-                                <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
                                   <Button
                                     size="small"
                                     type="dashed"
                                     loading={testingAccountId === acc.id}
                                     onClick={() => handleTestConnection(acc.id)}
-                                    style={{ borderRadius: 8 }}
+                                    style={{ borderRadius: 8, fontSize: 11, padding: '0 8px' }}
                                   >
                                     Test Connection
                                   </Button>
-                                  <Space>
+                                  <Space size={4}>
                                     <Button
                                       size="small"
                                       icon={<EditOutlined />}
+                                      style={{ borderRadius: 6 }}
                                       onClick={() => {
                                         setEditingAccount(acc);
                                         accountForm.setFieldsValue(acc);
@@ -969,21 +1051,22 @@ const SocialPublisherScreen = () => {
                                       }}
                                     />
                                     <Popconfirm
-                                      title="Delete this account configuration?"
+                                      title="Delete account?"
                                       onConfirm={async () => {
                                         await api.delete(`/social/accounts/${acc.id}/`);
                                         message.success('Account deleted');
                                         fetchData();
                                       }}
                                     >
-                                      <Button danger size="small" icon={<DeleteOutlined />} />
+                                      <Button danger size="small" icon={<DeleteOutlined />} style={{ borderRadius: 6 }} />
                                     </Popconfirm>
                                   </Space>
-                                </Space>
+                                </div>
                               </Card>
                             </Col>
                           ))
                         )}
+
                       </Row>
                     </div>
                   )
@@ -997,6 +1080,7 @@ const SocialPublisherScreen = () => {
                       dataSource={logs}
                       rowKey="id"
                       loading={loading}
+                      scroll={{ x: 800 }}
                       pagination={{ pageSize: 10 }}
                     />
                   )
@@ -1011,7 +1095,7 @@ const SocialPublisherScreen = () => {
             open={isPostModalOpen}
             onCancel={() => setIsPostModalOpen(false)}
             footer={null}
-            width={750}
+            width={800}
             style={{ borderRadius: 20 }}
           >
             <Form form={postForm} layout="vertical" onFinish={handleSavePost}>
@@ -1022,7 +1106,7 @@ const SocialPublisherScreen = () => {
                     label="Campaign Title / Item Name"
                     rules={[{ required: true, message: 'Please enter post title' }]}
                   >
-                    <Input placeholder="e.g. Item A - Cute Cartoon Figures" style={{ borderRadius: 10 }} />
+                    <Input placeholder="e.g. Item A - Cartoon Figures" style={{ borderRadius: 10 }} />
                   </Form.Item>
                 </Col>
                 <Col span={7}>
@@ -1047,7 +1131,7 @@ const SocialPublisherScreen = () => {
               >
                 <TextArea
                   rows={4}
-                  placeholder="Type your caption here... E.g. 'Good morning! Check out Item A today at The Giftify! 🛍️'"
+                  placeholder="Type your caption here... E.g. 'Check out Item A today at The Giftify! 🛍️'"
                   style={{ borderRadius: 12 }}
                 />
               </Form.Item>
@@ -1088,29 +1172,59 @@ const SocialPublisherScreen = () => {
                 </Col>
               </Row>
 
-              {/* Target Platforms Checkboxes */}
+              {/* Ultra-Clean Specific Accounts Selector */}
               <Form.Item
-                name="platforms"
-                label="Target Platforms to Auto-Post"
-                rules={[{ required: true, message: 'Select at least one platform' }]}
+                name="account_ids"
+                label={<span style={{ fontWeight: 700, color: '#4a2e35', fontSize: 14 }}>🎯 Target Social Media Accounts & Channels</span>}
+                rules={[{ required: true, message: 'Select at least one social account' }]}
               >
                 <Checkbox.Group style={{ width: '100%' }}>
-                  <Row gutter={16}>
-                    <Col span={8}>
-                      <Checkbox value="facebook">
-                        <Space><FacebookOutlined style={{ color: '#1877F2' }} /> Facebook</Space>
-                      </Checkbox>
-                    </Col>
-                    <Col span={8}>
-                      <Checkbox value="telegram">
-                        <Space><SendOutlined style={{ color: '#229ED9' }} /> Telegram</Space>
-                      </Checkbox>
-                    </Col>
-                    <Col span={8}>
-                      <Checkbox value="tiktok">
-                        <Space><ShareAltOutlined style={{ color: '#000' }} /> TikTok</Space>
-                      </Checkbox>
-                    </Col>
+                  <Row gutter={[12, 12]}>
+                    {accounts.map(acc => {
+                      const icon = acc.platform === 'facebook' ? <FacebookOutlined style={{ color: '#1877F2', fontSize: 18 }} /> : acc.platform === 'telegram' ? <SendOutlined style={{ color: '#229ED9', fontSize: 18 }} /> : <ShareAltOutlined style={{ color: '#000', fontSize: 18 }} />;
+                      const platformBg = acc.platform === 'facebook' ? '#e8f4ff' : acc.platform === 'telegram' ? '#e6f7ff' : '#f5f5f5';
+
+                      return (
+                        <Col span={12} key={acc.id}>
+                          <div
+                            style={{
+                              border: '1.5px solid #ffe4e6',
+                              borderRadius: 12,
+                              padding: '10px 14px',
+                              background: '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 12,
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+                            }}
+                          >
+                            <Checkbox value={acc.id} />
+                            <div
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 10,
+                                background: platformBg,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0
+                              }}
+                            >
+                              {icon}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, color: '#4a2e35', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {acc.name}
+                              </div>
+                              <div style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {acc.page_id_or_chat_id || acc.platform}
+                              </div>
+                            </div>
+                          </div>
+                        </Col>
+                      );
+                    })}
                   </Row>
                 </Checkbox.Group>
               </Form.Item>
@@ -1234,19 +1348,19 @@ const SocialPublisherScreen = () => {
               <Form.Item name="platform" label="Platform" rules={[{ required: true }]}>
                 <Select
                   options={[
-                    { label: 'Facebook Page', value: 'facebook' },
                     { label: 'Telegram Group/Channel', value: 'telegram' },
+                    { label: 'Facebook Page', value: 'facebook' },
                     { label: 'TikTok Account', value: 'tiktok' },
                   ]}
                 />
               </Form.Item>
 
-              <Form.Item name="name" label="Account Display Name" rules={[{ required: true }]}>
-                <Input placeholder="e.g. Official Facebook Page" style={{ borderRadius: 10 }} />
+              <Form.Item name="name" label="Account Display Name (e.g. Telegram Wholesale Group)" rules={[{ required: true }]}>
+                <Input placeholder="e.g. Telegram Group A - Wholesale" style={{ borderRadius: 10 }} />
               </Form.Item>
 
-              <Form.Item name="page_id_or_chat_id" label="Facebook Page ID / Telegram Chat ID / TikTok User ID">
-                <Input placeholder="e.g. 104829102910 or @my_gift_channel" style={{ borderRadius: 10 }} />
+              <Form.Item name="page_id_or_chat_id" label="Facebook Page ID / Telegram Chat ID / TikTok User ID" rules={[{ required: true }]}>
+                <Input placeholder="e.g. -1004974140086 or @group_handle" style={{ borderRadius: 10 }} />
               </Form.Item>
 
               <Form.Item name="app_id_or_bot_token" label="Telegram Bot Token / TikTok Client Key">
