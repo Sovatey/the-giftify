@@ -8,8 +8,10 @@ import {
     LogoutOutlined,
     RightOutlined,
     LeftOutlined,
-    HeartOutlined
+    HeartOutlined,
+    ShareAltOutlined
 } from "@ant-design/icons";
+
 import Logo from "../assets/images/logo-round.png";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ConfigProvider } from 'antd';
@@ -61,7 +63,14 @@ const Sidebar = () => {
             icon: <UserOutlined style={{ fontSize: '18px', color: '#38bdf8' }} />,
             permissionKey: "/user"
         },
+        {
+            key: "/social-publisher",
+            label: "Social Auto-Post",
+            icon: <ShareAltOutlined style={{ fontSize: '18px', color: '#f43f5e' }} />,
+            permissionKey: "/social-publisher"
+        },
     ];
+
 
     // Filter menu items dynamically based on user's role permissions!
     const filteredMenuItems = allMenuItems.filter(item => hasPermission(item.permissionKey, 'view'));

@@ -6,6 +6,8 @@ import POSScreen from "./screen/pos";
 import DashboardScreen from "./screen/admin/dashboard";
 import InventoryScreen from "./screen/admin/inventory";
 import UserScreen from "./screen/admin/user";
+import SocialPublisherScreen from "./screen/admin/social_publisher";
+
 
 import FloatingDecorations from "./components/FloatingDecorations";
 import InteractiveMascot from "./components/Mascot/InteractiveMascot";
@@ -80,6 +82,16 @@ const RoutesConfig = () => {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/social-publisher"
+          element={
+            <ProtectedRoute routePath="/social-publisher">
+              <SocialPublisherScreen />
+            </ProtectedRoute>
+          }
+        />
+
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

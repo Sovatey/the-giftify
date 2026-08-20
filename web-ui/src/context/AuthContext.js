@@ -55,7 +55,8 @@ export const AuthProvider = ({ children }) => {
     if (!permissions || permissions.length === 0) {
       // Fallbacks if no specific matrix defined
       if (role === 'Cashier' && routePath === '/pos') return true;
-      if (role === 'Manager' && ['/pos', '/inventory', '/dashboard'].includes(routePath)) return true;
+      if (role === 'Manager' && ['/pos', '/inventory', '/dashboard', '/social-publisher'].includes(routePath)) return true;
+
       return false;
     }
     const perm = permissions.find(p => p.route_path === routePath);

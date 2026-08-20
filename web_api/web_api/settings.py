@@ -26,7 +26,9 @@ INSTALLED_APPS = [
     'products',
     'inventory',
     'sales',
+    'social_publisher',
 ]
+
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
