@@ -870,6 +870,14 @@ const SocialPublisherScreen = () => {
                                         {renderAccountBadges(p, true)}
                                       </div>
 
+                                      {/* Media Format Indicator */}
+                                      <div style={{ marginTop: 2 }}>
+                                        <Tag color="magenta" style={{ fontSize: 9, borderRadius: 6, margin: 0, padding: '0 5px', fontWeight: 600 }}>
+                                          🎬 FB:{p.fb_post_type || 'FEED'} | TG:{p.telegram_post_type || 'PHOTO'} | TT:{p.tiktok_post_type === 'PHOTO_CAROUSEL' ? 'SLIDESHOW' : 'VIDEO'}
+                                        </Tag>
+                                      </div>
+
+
                                       {/* Post Title */}
                                       <div style={{ fontWeight: 800, color: '#4a2e35', fontSize: 13, lineHeight: '18px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                                         {p.title}
@@ -1229,12 +1237,57 @@ const SocialPublisherScreen = () => {
                 </Checkbox.Group>
               </Form.Item>
 
+              {/* Media Format Preferences per Platform */}
+              <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 14, marginBottom: 20, border: '1.5px solid #e2e8f0' }}>
+                <div style={{ fontWeight: 700, color: '#4a2e35', fontSize: 13, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>🎬</span> <span>Platform Media Format Settings (Choose Video, Reel, or Photo per Channel)</span>
+                </div>
+                <Row gutter={12}>
+                  <Col span={8}>
+                    <Form.Item name="fb_post_type" label="Facebook Format" style={{ marginBottom: 0 }}>
+                      <Select
+                        style={{ borderRadius: 8 }}
+                        options={[
+                          { label: '📘 Feed Post (Photo)', value: 'FEED' },
+                          { label: '🎬 Facebook Reel', value: 'REEL' },
+                          { label: '🎥 Standard Video', value: 'VIDEO' }
+                        ]}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item name="telegram_post_type" label="Telegram Format" style={{ marginBottom: 0 }}>
+                      <Select
+                        style={{ borderRadius: 8 }}
+                        options={[
+                          { label: '🖼️ Photo / Album', value: 'PHOTO' },
+                          { label: '🎥 Video / Album', value: 'VIDEO' },
+                          { label: '📄 File / Document', value: 'DOCUMENT' }
+                        ]}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item name="tiktok_post_type" label="TikTok Format" style={{ marginBottom: 0 }}>
+                      <Select
+                        style={{ borderRadius: 8 }}
+                        options={[
+                          { label: '🎵 TikTok Video', value: 'VIDEO' },
+                          { label: '🖼️ Photo Slideshow', value: 'PHOTO_CAROUSEL' }
+                        ]}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </div>
+
               {/* Scheduling Mode Selection */}
               <Form.Item
                 name="schedule_type"
                 label="Scheduling Mode"
                 rules={[{ required: true, message: 'Select scheduling mode' }]}
               >
+
                 <Select
                   style={{ borderRadius: 10 }}
                   options={[
