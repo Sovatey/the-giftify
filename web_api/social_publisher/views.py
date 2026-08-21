@@ -17,26 +17,69 @@ class SocialAccountViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='test-connection')
     def test_connection(self, request, pk=None):
         account = self.get_object()
-        dummy_post = SocialPost.objects.create(
-            title="Connection Test",
-            content="Testing social publisher integration from The Giftify POS.",
-            schedule_type='IMMEDIATE',
-            status='DRAFT'
-        )
-        
-        try:
-            if account.platform == 'facebook':
-                res = FacebookPublisher.publish(account, dummy_post)
-            elif account.platform == 'telegram':
-                res = TelegramPublisher.publish(account, dummy_post)
-            elif account.platform == 'tiktok':
-                res = TikTokPublisher.publish(account, dummy_post)
-            else:
-                res = {'success': False, 'message': 'Unknown platform'}
-        finally:
-            dummy_post.delete()
 
-        return Response(res, status=status.HTTP_200_OK if res['success'] else status.HTTP_400_BAD_REQUEST)
+        if account.is_simulated:
+            return Response({
+                'success': True,
+                'message': f"Test connection successfully! (Simulated Mode: {account.name})"
+            }, status=status.HTTP_200_OK)
+
+        try:
+            if account.platform == 'telegram':
+                bot_token = account.app_id_or_bot_token
+                if not bot_token:
+                    return Response({'success': False, 'message': 'Telegram Bot Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                url = f"https://api.telegram.org/bot{bot_token}/getMe"
+                res = requests.get(url, timeout=10)
+                res_data = res.json()
+                if res_data.get('ok'):
+                    username = res_data.get('result', {}).get('username', '')
+                    msg = f"Test connection successfully! (Bot: @{username})" if username else "Test connection successfully!"
+                    return Response({'success': True, 'message': msg}, status=status.HTTP_200_OK)
+                else:
+                    err_msg = res_data.get('description', 'Invalid Telegram Bot Token')
+                    return Response({'success': False, 'message': f"Telegram API Error: {err_msg}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            elif account.platform == 'facebook':
+                access_token = account.access_token
+                page_id = account.page_id_or_chat_id
+                if not access_token:
+                    return Response({'success': False, 'message': 'Facebook Access Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                target = page_id if page_id else 'me'
+                url = f"https://graph.facebook.com/v19.0/{target}"
+                res = requests.get(url, params={'access_token': access_token}, timeout=10)
+                res_data = res.json()
+                if res.status_code == 200 and 'id' in res_data:
+                    name = res_data.get('name', account.name)
+                    return Response({'success': True, 'message': f"Test connection successfully! (Page: {name})"}, status=status.HTTP_200_OK)
+                else:
+                    err_msg = res_data.get('error', {}).get('message', 'Invalid Access Token or Page ID')
+                    return Response({'success': False, 'message': f"Facebook API Error: {err_msg}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            elif account.platform == 'tiktok':
+                access_token = account.access_token
+                if not access_token:
+                    return Response({'success': False, 'message': 'TikTok Access Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                url = "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,display_name"
+                headers = {"Authorization": f"Bearer {access_token}"}
+                res = requests.get(url, headers=headers, timeout=10)
+                res_data = res.json()
+                if res.status_code == 200 and 'data' in res_data:
+                    display_name = res_data.get('data', {}).get('user', {}).get('display_name', account.name)
+                    return Response({'success': True, 'message': f"Test connection successfully! (User: {display_name})"}, status=status.HTTP_200_OK)
+                else:
+                    err_msg = res_data.get('error', {}).get('message', 'Invalid TikTok Access Token')
+                    return Response({'success': False, 'message': f"TikTok API Error: {err_msg}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            else:
+                return Response({'success': False, 'message': 'Unknown platform'}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({'success': False, 'message': f"Connection exception: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
     @action(detail=False, methods=['post'], url_path='tiktok-token-exchange')
     def tiktok_token_exchange(self, request):
@@ -132,6 +175,7 @@ class SocialPostViewSet(viewsets.ModelViewSet):
                 file=vid_f,
                 order=idx
             )
+
 
     def _prepare_data(self, request):
         data = {}

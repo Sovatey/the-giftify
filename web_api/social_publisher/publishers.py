@@ -4,54 +4,110 @@ import requests
 from django.utils import timezone
 from .models import SocialAccount, SocialPost, SocialPostLog
 
+from django.conf import settings
+
 DEFAULT_BASE_DOMAIN = os.environ.get('BASE_DOMAIN', 'http://127.0.0.1:8000')
+
+IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')
+VIDEO_EXTENSIONS = ('.mp4', '.mov', '.avi', '.mkv', '.webm')
+
+def resolve_local_file_path(url_or_path, file_obj=None):
+    if file_obj:
+        try:
+            if hasattr(file_obj, 'path') and os.path.exists(file_obj.path):
+                return file_obj.path
+        except Exception:
+            pass
+
+    if isinstance(url_or_path, str):
+        if url_or_path.startswith('/media/'):
+            rel = url_or_path.replace('/media/', '', 1)
+            full_p = os.path.join(settings.MEDIA_ROOT, rel)
+            if os.path.exists(full_p):
+                return full_p
+        elif '/media/' in url_or_path:
+            rel = url_or_path.split('/media/')[-1]
+            full_p = os.path.join(settings.MEDIA_ROOT, rel)
+            if os.path.exists(full_p):
+                return full_p
+    return None
 
 def get_all_media_items(post: SocialPost, media_type='image'):
     items = []
     base_domain = DEFAULT_BASE_DOMAIN
-    
-    if media_type == 'image':
-        if post.image_file:
-            path = post.image_file.path if hasattr(post.image_file, 'path') else None
-            url = f"{base_domain}{post.image_file.url}" if post.image_file.url.startswith('/') else post.image_file.url
-            items.append({'type': 'image', 'file_path': path, 'url': url})
-        elif post.image_url:
-            url_str = post.image_url
-            if url_str.startswith('/'):
-                url_str = f"{base_domain}{url_str}"
-            items.append({'type': 'image', 'file_path': None, 'url': url_str})
 
-    elif media_type == 'video':
-        if post.video_file:
-            path = post.video_file.path if hasattr(post.video_file, 'path') else None
-            url = f"{base_domain}{post.video_file.url}" if post.video_file.url.startswith('/') else post.video_file.url
-            items.append({'type': 'video', 'file_path': path, 'url': url})
-        elif post.video_url:
-            url_str = post.video_url
-            if url_str.startswith('/'):
-                url_str = f"{base_domain}{url_str}"
-            items.append({'type': 'video', 'file_path': None, 'url': url_str})
+    all_attachments = list(post.attachments.all()) if post.pk else []
 
-    # Attachments gallery items
-    if post.pk:
-        for att in post.attachments.filter(media_type=media_type.upper()):
-            if att.file:
-                path = att.file.path if hasattr(att.file, 'path') else None
-                url = f"{base_domain}{att.file.url}" if att.file.url.startswith('/') else att.file.url
-                items.append({'type': media_type, 'file_path': path, 'url': url})
-            elif att.url:
-                url_str = att.url
+    # 1. Attachments Gallery (If present, this is the primary source of media items)
+    for att in all_attachments:
+        file_url = att.file.url if att.file else att.url
+        if not file_url:
+            continue
+
+        url_str = f"{base_domain}{file_url}" if file_url.startswith('/') else file_url
+        file_path = resolve_local_file_path(file_url, att.file)
+
+        is_vid = file_url.lower().endswith(VIDEO_EXTENSIONS) or att.media_type == 'VIDEO'
+        is_img = file_url.lower().endswith(IMAGE_EXTENSIONS) or att.media_type == 'IMAGE'
+
+        if file_url.lower().endswith(IMAGE_EXTENSIONS):
+            is_vid = False
+            is_img = True
+
+        if media_type == 'image' and is_img:
+            items.append({'type': 'image', 'file_path': file_path, 'url': url_str})
+        elif media_type == 'video' and is_vid:
+            items.append({'type': 'video', 'file_path': file_path, 'url': url_str})
+
+    # 2. Single Image/Video fields on Post (Only add if NO attachments match)
+    if not items:
+        if media_type == 'image':
+            if post.image_file:
+                path = resolve_local_file_path(post.image_file.url, post.image_file)
+                url = f"{base_domain}{post.image_file.url}" if post.image_file.url.startswith('/') else post.image_file.url
+                items.append({'type': 'image', 'file_path': path, 'url': url})
+            elif post.image_url:
+                url_str = post.image_url
+                path = resolve_local_file_path(url_str)
                 if url_str.startswith('/'):
                     url_str = f"{base_domain}{url_str}"
-                items.append({'type': media_type, 'file_path': None, 'url': url_str})
+                items.append({'type': 'image', 'file_path': path, 'url': url_str})
 
-    # Deduplicate by url
+        elif media_type == 'video':
+            if post.video_file:
+                path = resolve_local_file_path(post.video_file.url, post.video_file)
+                url = f"{base_domain}{post.video_file.url}" if post.video_file.url.startswith('/') else post.video_file.url
+                items.append({'type': 'video', 'file_path': path, 'url': url})
+            elif post.video_url:
+                url_str = post.video_url
+                path = resolve_local_file_path(url_str)
+                if url_str.startswith('/'):
+                    url_str = f"{base_domain}{url_str}"
+                items.append({'type': 'video', 'file_path': path, 'url': url_str})
+
+    # 3. Robust Deduplication by normalized filename / URL key
     seen = set()
     unique_items = []
     for item in items:
-        if item['url'] and item['url'] not in seen:
-            seen.add(item['url'])
+        filename_key = os.path.basename(item['file_path']) if item.get('file_path') else item['url'].split('/')[-1]
+        
+        # Normalize Django auto-incremented file suffixes (e.g., photo_1.jpg -> photo.jpg)
+        parts = filename_key.rsplit('.', 1)
+        if len(parts) == 2:
+            base_name, ext = parts[0], parts[1]
+            if '_' in base_name and base_name.rsplit('_', 1)[-1].isdigit():
+                base_name = base_name.rsplit('_', 1)[0]
+            normalized_key = f"{base_name}.{ext}".lower()
+        else:
+            normalized_key = filename_key.lower()
+
+        if normalized_key not in seen:
+            seen.add(normalized_key)
             unique_items.append(item)
+
+    return unique_items
+
+
 
     return unique_items
 
