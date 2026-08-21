@@ -175,7 +175,7 @@ const POSScreen = () => {
         },
       }}
     >
-      <Layout style={{ minHeight: '100vh', background: 'var(--bg-gradient)' }}>
+      <Layout style={{ minHeight: '100vh', background: '#fdfbfb' }}>
         <Sidebar />
         <Layout style={{ background: 'transparent' }}>
           <Content style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>

@@ -10,8 +10,8 @@
   --pastel-peach: #ffedd5;
   --text-dark: #3b232a;
   --text-muted: #8c6a74;
-  --bg-gradient: linear-gradient(135deg, #fff0f3 0%, #f3e8ff 50%, #e0f2fe 100%);
-  --card-bg: rgba(255, 255, 255, 0.92);
+  --bg-gradient: #fdfbfb;
+  --card-bg: #ffffff;
   --border-radius-lg: 24px;
   --border-radius-md: 16px;
 }
@@ -24,75 +24,84 @@ body {
   margin: 0;
   padding: 0;
   font-family: 'Outfit', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--bg-gradient);
-  background-attachment: fixed;
+  background: #fdfbfb !important;
   color: var(--text-dark);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Force all Layout components to match exact #fdfbfb background */
+.ant-layout {
+  background: #fdfbfb !important;
+}
+
 /* Global Text Spacing & Typography Enhancements */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   margin-top: 4px;
   margin-bottom: 10px;
   letter-spacing: 0.4px;
   line-height: 1.4;
 }
 
-p, span, div, label, input, button {
+p,
+span,
+div,
+label,
+input,
+button {
   line-height: 1.6;
   letter-spacing: 0.25px;
 }
 
-/* 3D CLAYMORPHISM & NEUMORPHIC UI DESIGN SYSTEM */
-.glass-card, .clay-card-3d {
-  background: rgba(255, 255, 255, 0.92) !important;
-  border-radius: 24px !important;
-  border: 2px solid rgba(255, 255, 255, 0.9) !important;
-  box-shadow: 
-    8px 12px 24px rgba(255, 174, 173, 0.28),
-    -6px -6px 18px rgba(255, 255, 255, 0.95),
-    inset 2px 2px 5px rgba(255, 255, 255, 0.9),
-    inset -2px -2px 5px rgba(255, 117, 140, 0.1) !important;
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease !important;
-  transform-style: preserve-3d;
+/* Card Styling - Standardized Clean White Cards with Soft Pink Borders */
+.glass-card,
+.clay-card-3d {
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(255, 174, 173, 0.35) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
 }
 
-.glass-card:hover, .clay-card-3d:hover {
-  transform: translateY(-5px) scale(1.01) !important;
-  box-shadow: 
-    12px 18px 30px rgba(255, 174, 173, 0.38),
-    -8px -8px 22px rgba(255, 255, 255, 1),
-    inset 3px 3px 6px rgba(255, 255, 255, 1),
-    inset -3px -3px 6px rgba(255, 117, 140, 0.15) !important;
+.glass-card:hover,
+.clay-card-3d:hover {
+  box-shadow: 0 6px 24px rgba(255, 174, 173, 0.15) !important;
 }
 
 /* 3D Claymorphic Gradient Buttons */
-.btn-girly, .btn-3d {
+.btn-girly,
+.btn-3d {
   background: linear-gradient(145deg, #ffaead 0%, #ff758c 100%) !important;
   border: none !important;
   color: white !important;
   font-weight: 700 !important;
   border-radius: 25px !important;
-  box-shadow: 
+  box-shadow:
     0 5px 0 #e65c7b,
     0 9px 16px rgba(255, 117, 140, 0.4),
     inset 0 2px 3px rgba(255, 255, 255, 0.6) !important;
   transition: all 0.15s ease-in-out !important;
 }
 
-.btn-girly:hover, .btn-3d:hover {
+.btn-girly:hover,
+.btn-3d:hover {
   transform: translateY(-2px) !important;
-  box-shadow: 
+  box-shadow:
     0 7px 0 #e65c7b,
     0 13px 20px rgba(255, 117, 140, 0.5),
     inset 0 3px 4px rgba(255, 255, 255, 0.8) !important;
   color: white !important;
 }
 
-.btn-girly:active, .btn-3d:active {
+.btn-girly:active,
+.btn-3d:active {
   transform: translateY(3px) !important;
-  box-shadow: 
+  box-shadow:
     0 2px 0 #e65c7b,
     0 4px 8px rgba(255, 117, 140, 0.3),
     inset 0 1px 2px rgba(0, 0, 0, 0.2) !important;
@@ -110,15 +119,20 @@ p, span, div, label, input, button {
   letter-spacing: 0.25px;
 }
 
+
 /* 3D Inputs & Select Boxes */
-.ant-input, .ant-input-number, .ant-select-selector {
+.ant-input,
+.ant-input-number,
+.ant-select-selector {
   border-radius: 16px !important;
   border: 1.5px solid rgba(255, 174, 173, 0.4) !important;
   box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(255, 255, 255, 0.8) !important;
   transition: all 0.2s ease !important;
 }
 
-.ant-input:focus, .ant-input-number:focus, .ant-select-focused .ant-select-selector {
+.ant-input:focus,
+.ant-input-number:focus,
+.ant-select-focused .ant-select-selector {
   border-color: #ff758c !important;
   box-shadow: 0 0 0 3px rgba(255, 117, 140, 0.25), inset 2px 2px 5px rgba(0, 0, 0, 0.03) !important;
 }
@@ -139,7 +153,7 @@ p, span, div, label, input, button {
   line-height: 1.5 !important;
 }
 
-.ant-form-item-label > label {
+.ant-form-item-label>label {
   padding-bottom: 4px !important;
   font-weight: 600;
   color: var(--text-dark);
@@ -158,14 +172,17 @@ p, span, div, label, input, button {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.5);
   border-radius: 10px;
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--primary-pink);
   border-radius: 10px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--pastel-rose);
 }
@@ -175,9 +192,12 @@ p, span, div, label, input, button {
   body * {
     visibility: hidden;
   }
-  #printable-receipt, #printable-receipt * {
+
+  #printable-receipt,
+  #printable-receipt * {
     visibility: visible;
   }
+
   #printable-receipt {
     position: absolute;
     left: 0;

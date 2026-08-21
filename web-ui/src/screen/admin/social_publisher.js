@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Layout, Card, Tabs, Button, Form, Input, Select, TimePicker, DatePicker,
   Checkbox, Table, Tag, Space, Modal, Switch, Row, Col, Statistic, Tooltip,
-  message, Popconfirm, Upload, Badge, Calendar, Divider
+  message, Popconfirm, Upload, Badge, Calendar, Divider, Segmented
 } from 'antd';
 import {
   FacebookOutlined, SendOutlined, ClockCircleOutlined, SyncOutlined,
@@ -10,7 +10,8 @@ import {
   ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined,
   ReloadOutlined, DeleteOutlined, EditOutlined, ShareAltOutlined,
   UploadOutlined, VideoCameraOutlined, PictureOutlined, KeyOutlined,
-  CalendarOutlined, FireOutlined, UserOutlined
+  CalendarOutlined, FireOutlined, UserOutlined, AppstoreOutlined,
+  UnorderedListOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import Sidebar from '../sidebar';
@@ -51,6 +52,7 @@ const generateCodeChallenge = async (codeVerifier) => {
 
 const SocialPublisherScreen = () => {
   const [activeTab, setActiveTab] = useState('calendar');
+  const [calendarViewMode, setCalendarViewMode] = useState('card'); // 'card' | 'list'
   const [loading, setLoading] = useState(false);
   const [posts, setPosts] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -169,26 +171,26 @@ const SocialPublisherScreen = () => {
     handleTikTokCallback();
   }, []);
 
-const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
-const VIDEO_EXTS = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+  const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+  const VIDEO_EXTS = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
 
-const checkIsImage = (urlOrPath, mediaType) => {
-  if (urlOrPath) {
-    const clean = urlOrPath.toLowerCase().split('?')[0].split('#')[0];
-    if (IMAGE_EXTS.some(ext => clean.endsWith(ext))) return true;
-    if (VIDEO_EXTS.some(ext => clean.endsWith(ext))) return false;
-  }
-  return mediaType === 'IMAGE';
-};
+  const checkIsImage = (urlOrPath, mediaType) => {
+    if (urlOrPath) {
+      const clean = urlOrPath.toLowerCase().split('?')[0].split('#')[0];
+      if (IMAGE_EXTS.some(ext => clean.endsWith(ext))) return true;
+      if (VIDEO_EXTS.some(ext => clean.endsWith(ext))) return false;
+    }
+    return mediaType === 'IMAGE';
+  };
 
-const checkIsVideo = (urlOrPath, mediaType) => {
-  if (urlOrPath) {
-    const clean = urlOrPath.toLowerCase().split('?')[0].split('#')[0];
-    if (VIDEO_EXTS.some(ext => clean.endsWith(ext))) return true;
-    if (IMAGE_EXTS.some(ext => clean.endsWith(ext))) return false;
-  }
-  return mediaType === 'VIDEO';
-};
+  const checkIsVideo = (urlOrPath, mediaType) => {
+    if (urlOrPath) {
+      const clean = urlOrPath.toLowerCase().split('?')[0].split('#')[0];
+      if (VIDEO_EXTS.some(ext => clean.endsWith(ext))) return true;
+      if (IMAGE_EXTS.some(ext => clean.endsWith(ext))) return false;
+    }
+    return mediaType === 'VIDEO';
+  };
 
   // Helper to open Edit Post Modal with populated photo/video files
   const openEditPostModal = (record) => {
@@ -719,7 +721,7 @@ const checkIsVideo = (urlOrPath, mediaType) => {
   return (
     <Layout style={{ minHeight: '100vh', background: '#fdfbfb' }}>
       <Sidebar />
-      <Layout style={{ padding: '20px 24px', background: 'transparent', maxWidth: '100%', overflowX: 'hidden' }}>
+      <Layout style={{ flex: 1, minWidth: 0, padding: '20px 24px', background: 'transparent', overflowX: 'hidden' }}>
         <Content>
           {/* Header Banner */}
           <div
@@ -788,7 +790,7 @@ const checkIsVideo = (urlOrPath, mediaType) => {
                   setIsPostModalOpen(true);
                 }}
               >
-                + Schedule New Post
+                Schedule New Post
               </Button>
             </Space>
           </div>
@@ -856,40 +858,51 @@ const checkIsVideo = (urlOrPath, mediaType) => {
                   label: <span><CalendarOutlined /> Weekly Content Calendar Planner</span>,
                   children: (
                     <div>
-                      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                         <div>
                           <h3 style={{ margin: 0, color: '#4a2e35', fontWeight: 800 }}>🗓️ 7-Day Weekly Content Calendar</h3>
                           <p style={{ margin: 0, color: '#888', fontSize: 12 }}>
-                            Scroll horizontally to view all 7 days. Each column displays posts assigned to that day!
+                            Scroll horizontally to view all 7 days. Switch between Card and Compact List views!
                           </p>
                         </div>
-                        <Button
-                          type="primary"
-                          icon={<PlusOutlined />}
-                          style={{ borderRadius: 10, background: '#ff758c', borderColor: '#ff758c', fontWeight: 700 }}
-                          onClick={() => {
-                            setEditingPost(null);
-                            postForm.resetFields();
-                            setImageFileList([]);
-                            setVideoFileList([]);
-                            setSelectedProductIds([]);
-                            const defaultAccIds = accounts.map(a => a.id);
-                            postForm.setFieldsValue({
-                              schedule_type: 'WEEKLY_RECURRING',
-                              recurring_days: ['MON'],
-                              account_ids: defaultAccIds,
-                              platforms: ['facebook', 'telegram', 'tiktok'],
-                              fb_post_type: 'FEED',
-                              tiktok_post_type: 'PHOTO_CAROUSEL',
-                              telegram_post_type: 'PHOTO',
-                              is_active: true,
-                              daily_time: dayjs('09:00:00', 'HH:mm:ss')
-                            });
-                            setIsPostModalOpen(true);
-                          }}
-                        >
-                          Add Post to Calendar
-                        </Button>
+                        <Space wrap size="middle">
+                          <Segmented
+                            value={calendarViewMode}
+                            onChange={setCalendarViewMode}
+                            options={[
+                              { label: 'Cards View', value: 'card', icon: <AppstoreOutlined /> },
+                              { label: 'Compact List', value: 'list', icon: <UnorderedListOutlined /> }
+                            ]}
+                            style={{ borderRadius: 10, background: '#f5f0f4', padding: 3, fontWeight: 700 }}
+                          />
+                          <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            style={{ borderRadius: 10, background: '#ff758c', borderColor: '#ff758c', fontWeight: 700 }}
+                            onClick={() => {
+                              setEditingPost(null);
+                              postForm.resetFields();
+                              setImageFileList([]);
+                              setVideoFileList([]);
+                              setSelectedProductIds([]);
+                              const defaultAccIds = accounts.map(a => a.id);
+                              postForm.setFieldsValue({
+                                schedule_type: 'WEEKLY_RECURRING',
+                                recurring_days: ['MON'],
+                                account_ids: defaultAccIds,
+                                platforms: ['facebook', 'telegram', 'tiktok'],
+                                fb_post_type: 'FEED',
+                                tiktok_post_type: 'PHOTO_CAROUSEL',
+                                telegram_post_type: 'PHOTO',
+                                is_active: true,
+                                daily_time: dayjs('09:00:00', 'HH:mm:ss')
+                              });
+                              setIsPostModalOpen(true);
+                            }}
+                          >
+                            Add Post to Calendar
+                          </Button>
+                        </Space>
                       </div>
 
                       {/* Fully Responsive 7-Day Scrollable Grid */}
@@ -909,12 +922,13 @@ const checkIsVideo = (urlOrPath, mediaType) => {
                             <div
                               key={day.value}
                               style={{
-                                flex: '0 0 220px',
-                                minWidth: '220px',
+                                flex: '0 0 250px',
+                                minWidth: '250px',
                                 background: '#ffffff',
                                 borderRadius: 16,
                                 border: `2px solid ${day.color}33`,
-                                minHeight: 420,
+                                height: 500,
+                                maxHeight: 500,
                                 display: 'flex',
                                 flexDirection: 'column',
                                 boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
@@ -932,7 +946,8 @@ const checkIsVideo = (urlOrPath, mediaType) => {
                                   fontSize: 14,
                                   display: 'flex',
                                   justifyContent: 'space-between',
-                                  alignItems: 'center'
+                                  alignItems: 'center',
+                                  flexShrink: 0
                                 }}
                               >
                                 <span>{day.label}</span>
@@ -940,7 +955,17 @@ const checkIsVideo = (urlOrPath, mediaType) => {
                               </div>
 
                               {/* Posts Container */}
-                              <div style={{ padding: '10px', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              <div
+                                style={{
+                                  padding: '10px',
+                                  flex: 1,
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '12px',
+                                  overflowY: 'auto',
+                                  maxHeight: '440px'
+                                }}
+                              >
                                 {dayPosts.length === 0 ? (
                                   <div style={{ textAlign: 'center', padding: '40px 4px', color: '#ccc', fontSize: 12 }}>
                                     No posts set for {day.label}
@@ -949,6 +974,89 @@ const checkIsVideo = (urlOrPath, mediaType) => {
                                   dayPosts.map((p) => {
                                     const firstAttImage = p.attachments?.find(a => a.media_type === 'IMAGE' || (a.file_url && !a.file_url.endsWith('.mp4')))?.file_url;
                                     const imgUrl = p.image_file_url || p.image_url || firstAttImage;
+
+                                    if (calendarViewMode === 'list') {
+                                      return (
+                                        <div
+                                          key={p.id}
+                                          style={{
+                                            background: '#ffffff',
+                                            borderRadius: 12,
+                                            border: '1.5px solid #ffe4e6',
+                                            padding: '8px 10px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '8px',
+                                            boxShadow: '0 2px 6px rgba(255, 117, 140, 0.04)'
+                                          }}
+                                        >
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                            {imgUrl ? (
+                                              <img src={imgUrl} alt="" style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+                                            ) : (
+                                              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#fff0f3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                <PictureOutlined style={{ color: '#ff758c', fontSize: 16 }} />
+                                              </div>
+                                            )}
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                              <div style={{ fontWeight: 700, color: '#4a2e35', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {p.title}
+                                              </div>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                                <Tag color="gold" style={{ fontSize: 10, borderRadius: 4, margin: 0, padding: '0 4px', lineHeight: '16px', fontWeight: 700 }}>
+                                                  ⏰ {p.daily_time ? p.daily_time.substring(0, 5) : '09:00'}
+                                                </Tag>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Actions on right side */}
+                                          <Space size={2} style={{ flexShrink: 0 }}>
+                                            <Tooltip title="Post Now">
+                                              <Button
+                                                type="primary"
+                                                size="small"
+                                                shape="circle"
+                                                icon={<ThunderboltOutlined style={{ fontSize: 11 }} />}
+                                                style={{
+                                                  background: 'linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)',
+                                                  border: 'none',
+                                                  width: 24,
+                                                  height: 24,
+                                                  minWidth: 24,
+                                                  boxShadow: '0 2px 4px rgba(255,117,140,0.3)',
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  justifyContent: 'center'
+                                                }}
+                                                onClick={() => handlePublishNow(p.id)}
+                                              />
+                                            </Tooltip>
+                                            <Tooltip title="Edit">
+                                              <Button
+                                                size="small"
+                                                type="text"
+                                                shape="circle"
+                                                icon={<EditOutlined style={{ color: '#4a2e35', fontSize: 12 }} />}
+                                                style={{ width: 22, height: 22, minWidth: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                onClick={() => openEditPostModal(p)}
+                                              />
+                                            </Tooltip>
+                                            <Popconfirm title="Delete?" onConfirm={() => handleDeletePost(p.id)}>
+                                              <Button
+                                                size="small"
+                                                type="text"
+                                                shape="circle"
+                                                danger
+                                                icon={<DeleteOutlined style={{ fontSize: 12 }} />}
+                                                style={{ width: 22, height: 22, minWidth: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                              />
+                                            </Popconfirm>
+                                          </Space>
+                                        </div>
+                                      );
+                                    }
 
                                     return (
                                       <div

@@ -91,122 +91,143 @@ const Sidebar = () => {
                 },
             }}
         >
+        <div style={{ width: collapsed ? 80 : 260, minWidth: collapsed ? 80 : 260, flexShrink: 0, transition: 'all 0.25s cubic-bezier(0.2, 0, 0, 1)' }}>
             <Sider
-                width={260}
+                width={collapsed ? 80 : 260}
                 collapsed={collapsed}
                 style={{
-                    background: "rgba(255, 255, 255, 0.95)",
-                    backdropFilter: "blur(10px)",
+                    background: "rgba(255, 255, 255, 0.96)",
+                    backdropFilter: "blur(12px)",
                     boxShadow: "4px 0 20px rgba(255, 174, 173, 0.15)",
-                    position: "relative",
-                    borderRight: "1px solid rgba(255, 174, 173, 0.2)"
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    height: "100vh",
+                    zIndex: 1000,
+                    borderRight: "1px solid rgba(255, 174, 173, 0.3)",
+                    overflow: "visible"
                 }}
             >
-                {/* Header Logo */}
-                <div
-                    style={{
-                        padding: "20px 16px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: collapsed ? "center" : "flex-start",
-                        borderBottom: "1px dashed rgba(255, 174, 173, 0.4)",
-                        marginBottom: "16px",
-                    }}
-                >
-                    <img
-                        src={Logo}
-                        alt="The Giftify"
-                        style={{
-                            width: "36px",
-                            height: "36px",
-                            borderRadius: "50%",
-                            boxShadow: "0 4px 10px rgba(255, 117, 140, 0.3)"
-                        }}
-                    />
-                    {!collapsed && (
-                        <div style={{ marginLeft: "12px", display: "flex", flexDirection: "column" }}>
-                            <strong style={{ fontSize: "19px", color: "#4a2e35", letterSpacing: "0.5px" }}>
-                                The Giftify <HeartOutlined style={{ color: "#ff758c" }} />
-                            </strong>
-                            <span style={{ fontSize: "11px", color: "#8c6a74", fontWeight: 600 }}>POS & Inventory</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Toggle Collapse Button */}
+                {/* Toggle Collapse Button - Floating on right border */}
                 <Button
                     type="default"
                     icon={collapsed ? <RightOutlined /> : <LeftOutlined />}
                     onClick={toggleSidebar}
                     style={{
                         position: "absolute",
-                        top: "22px",
+                        top: "24px",
                         right: "-14px",
-                        zIndex: 10,
+                        zIndex: 1100,
                         width: "28px",
                         height: "28px",
                         borderRadius: "50%",
-                        border: "1px solid #ffaead",
-                        background: "#fff",
+                        border: "1.5px solid #ffaead",
+                        background: "#ffffff",
                         color: "#ff758c",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                        boxShadow: "0 4px 10px rgba(255, 117, 140, 0.25)",
                         cursor: "pointer"
                     }}
                 />
 
-                {/* User Info Card */}
-                {!collapsed && (
-                    <div
-                        style={{
-                            margin: "0 12px 16px 12px",
-                            padding: "12px",
-                            borderRadius: "14px",
-                            background: "linear-gradient(135deg, #fff0f3 0%, #f3e8ff 100%)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                            border: "1px solid rgba(255, 174, 173, 0.3)"
-                        }}
-                    >
-                        <Avatar style={{ backgroundColor: '#ff758c' }} icon={<UserOutlined />}>
-                            {user?.name?.[0] || 'U'}
-                        </Avatar>
-                        <div style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div style={{ fontWeight: '700', fontSize: '13px', color: '#4a2e35', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                {user?.name || user?.username || 'Guest Staff'}
-                            </div>
-                            <div>
-                                <Tag color={getRoleColor(role)} style={{ borderRadius: '10px', fontSize: '11px', margin: 0, fontWeight: 700, padding: '2px 10px' }}>
-                                    {role}
-                                </Tag>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Dynamic Menu based on Permissions */}
-                <Menu
-                    mode="inline"
-                    onClick={handleMenuClick}
-                    selectedKeys={[location.pathname]}
+                {/* Inner Scrollable Container */}
+                <div
                     style={{
-                        borderRight: 'none',
-                        background: 'transparent',
-                        fontWeight: 600,
+                        height: "calc(100vh - 70px)",
+                        overflowY: "auto",
+                        overflowX: "hidden",
+                        display: "flex",
+                        flexDirection: "column"
                     }}
                 >
-                    {filteredMenuItems.map(item => (
-                        <Menu.Item key={item.key} icon={item.icon} style={{ borderRadius: '12px', margin: '4px 12px' }}>
-                            {item.label}
-                        </Menu.Item>
-                    ))}
-                </Menu>
+                    {/* Header Logo */}
+                    <div
+                        style={{
+                            padding: "20px 16px 16px 16px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: collapsed ? "center" : "flex-start",
+                            borderBottom: "1px dashed rgba(255, 174, 173, 0.4)",
+                            marginBottom: "14px",
+                            flexShrink: 0
+                        }}
+                    >
+                        <img
+                            src={Logo}
+                            alt="The Giftify"
+                            style={{
+                                width: "36px",
+                                height: "36px",
+                                borderRadius: "50%",
+                                boxShadow: "0 4px 10px rgba(255, 117, 140, 0.3)",
+                                flexShrink: 0
+                            }}
+                        />
+                        {!collapsed && (
+                            <div style={{ marginLeft: "12px", display: "flex", flexDirection: "column" }}>
+                                <strong style={{ fontSize: "18px", color: "#4a2e35", letterSpacing: "0.5px" }}>
+                                    The Giftify <HeartOutlined style={{ color: "#ff758c" }} />
+                                </strong>
+                                <span style={{ fontSize: "11px", color: "#8c6a74", fontWeight: 600 }}>POS & Inventory</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* User Info Card */}
+                    {!collapsed && (
+                        <div
+                            style={{
+                                margin: "0 12px 14px 12px",
+                                padding: "10px 12px",
+                                borderRadius: "14px",
+                                background: "linear-gradient(135deg, #fff0f3 0%, #f3e8ff 100%)",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                border: "1px solid rgba(255, 174, 173, 0.3)",
+                                flexShrink: 0
+                            }}
+                        >
+                            <Avatar style={{ backgroundColor: '#ff758c' }} icon={<UserOutlined />}>
+                                {user?.name?.[0] || 'U'}
+                            </Avatar>
+                            <div style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ fontWeight: '700', fontSize: '13px', color: '#4a2e35', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                    {user?.name || user?.username || 'Guest Staff'}
+                                </div>
+                                <div>
+                                    <Tag color={getRoleColor(role)} style={{ borderRadius: '10px', fontSize: '10px', margin: 0, fontWeight: 700, padding: '1px 8px' }}>
+                                        {role}
+                                    </Tag>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Dynamic Menu */}
+                    <Menu
+                        mode="inline"
+                        onClick={handleMenuClick}
+                        selectedKeys={[location.pathname]}
+                        style={{
+                            borderRight: 'none',
+                            background: 'transparent',
+                            fontWeight: 600,
+                            flex: 1
+                        }}
+                    >
+                        {filteredMenuItems.map(item => (
+                            <Menu.Item key={item.key} icon={item.icon} style={{ borderRadius: '12px', margin: '4px 10px' }}>
+                                {item.label}
+                            </Menu.Item>
+                        ))}
+                    </Menu>
+                </div>
 
                 {/* Bottom Logout Button */}
-                <div style={{ position: "absolute", bottom: "16px", width: "100%", padding: "0 12px" }}>
+                <div style={{ position: "absolute", bottom: "14px", width: "100%", padding: "0 12px", flexShrink: 0 }}>
                     <Button
                         block
                         type="text"
@@ -217,13 +238,15 @@ const Sidebar = () => {
                             borderRadius: "12px",
                             fontWeight: 700,
                             textAlign: collapsed ? "center" : "left",
-                            background: "rgba(255, 240, 243, 0.6)",
+                            background: "rgba(255, 240, 243, 0.8)",
+                            border: "1px solid rgba(255, 174, 173, 0.3)"
                         }}
                     >
                         {!collapsed && "Log Out"}
                     </Button>
                 </div>
             </Sider>
+        </div>
         </ConfigProvider>
     );
 };

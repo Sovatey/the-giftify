@@ -30,7 +30,7 @@ const UserScreen = () => {
     ];
 
     return (
-        <Layout style={{ minHeight: '100vh', background: 'var(--bg-gradient)' }}>
+        <Layout style={{ minHeight: '100vh', background: '#fdfbfb' }}>
             <Sidebar />
             <Layout style={{ background: 'transparent' }}>
                 <Content style={{ padding: 24, margin: 0 }}>
