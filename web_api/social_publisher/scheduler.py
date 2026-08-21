@@ -28,16 +28,19 @@ def check_and_publish_due_posts():
         today_code = DAY_MAP.get(now.weekday())
 
         # 1. Process ONE_TIME scheduled posts
-        one_time_due = SocialPost.objects.filter(
+        one_time_due = list(SocialPost.objects.filter(
             is_active=True,
             schedule_type='ONE_TIME',
             status='SCHEDULED',
             scheduled_at__lte=now
-        )
+        ))
 
         for post in one_time_due:
-            logger.info(f"[AutoPoster] Triggering ONE_TIME scheduled post #{post.id}: {post.title}")
-            PublisherEngine.publish_post(post)
+            updated = SocialPost.objects.filter(id=post.id, status='SCHEDULED').update(status='PROCESSING')
+            if updated > 0:
+                logger.info(f"[AutoPoster] Triggering ONE_TIME scheduled post #{post.id}: {post.title}")
+                post.refresh_from_db()
+                PublisherEngine.publish_post(post)
 
         # 2. Process DAILY_RECURRING posts
         recurring_posts = SocialPost.objects.filter(
@@ -48,12 +51,15 @@ def check_and_publish_due_posts():
 
         for post in recurring_posts:
             already_ran_today = post.last_published_at and timezone.localtime(post.last_published_at).date() == current_date
-            if not already_ran_today:
+            if not already_ran_today and post.status != 'PROCESSING':
                 post_time = post.daily_time
                 if (current_time.hour > post_time.hour) or \
                    (current_time.hour == post_time.hour and current_time.minute >= post_time.minute):
-                    logger.info(f"[AutoPoster] Triggering DAILY_RECURRING post #{post.id}: {post.title} (Daily at {post_time})")
-                    PublisherEngine.publish_post(post)
+                    updated = SocialPost.objects.filter(id=post.id).exclude(status='PROCESSING').update(status='PROCESSING')
+                    if updated > 0:
+                        logger.info(f"[AutoPoster] Triggering DAILY_RECURRING post #{post.id}: {post.title} (Daily at {post_time})")
+                        post.refresh_from_db()
+                        PublisherEngine.publish_post(post)
 
         # 3. Process WEEKLY_RECURRING posts
         weekly_posts = SocialPost.objects.filter(
@@ -66,12 +72,15 @@ def check_and_publish_due_posts():
             days = post.recurring_days or []
             if today_code in days or now.weekday() in days:
                 already_ran_today = post.last_published_at and timezone.localtime(post.last_published_at).date() == current_date
-                if not already_ran_today:
+                if not already_ran_today and post.status != 'PROCESSING':
                     post_time = post.daily_time
                     if (current_time.hour > post_time.hour) or \
                        (current_time.hour == post_time.hour and current_time.minute >= post_time.minute):
-                        logger.info(f"[AutoPoster] Triggering WEEKLY_RECURRING post #{post.id}: {post.title} (Day: {today_code} at {post_time})")
-                        PublisherEngine.publish_post(post)
+                        updated = SocialPost.objects.filter(id=post.id).exclude(status='PROCESSING').update(status='PROCESSING')
+                        if updated > 0:
+                            logger.info(f"[AutoPoster] Triggering WEEKLY_RECURRING post #{post.id}: {post.title} (Day: {today_code} at {post_time})")
+                            post.refresh_from_db()
+                            PublisherEngine.publish_post(post)
 
     except Exception as e:
         logger.error(f"[AutoPoster Scheduler Error] {str(e)}")

@@ -230,10 +230,12 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         self._process_multi_attachments(request, post)
 
         if post.schedule_type == 'IMMEDIATE':
+            post.status = 'PROCESSING'
+            post.save(update_fields=['status'])
             PublisherEngine.publish_post(post)
         elif post.schedule_type in ['ONE_TIME', 'DAILY_RECURRING', 'WEEKLY_RECURRING']:
             post.status = 'SCHEDULED'
-            post.save()
+            post.save(update_fields=['status'])
 
 
         headers = self.get_success_headers(serializer.data)
@@ -251,7 +253,7 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         if post.schedule_type in ['ONE_TIME', 'DAILY_RECURRING', 'WEEKLY_RECURRING']:
             post.status = 'SCHEDULED'
             post.last_published_at = None
-            post.save()
+            post.save(update_fields=['status', 'last_published_at'])
 
         if 'image_files' in request.FILES or 'video_files' in request.FILES:
             post.attachments.all().delete()
@@ -264,6 +266,10 @@ class SocialPostViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='publish-now')
     def publish_now(self, request, pk=None):
         post = self.get_object()
+        if post.status == 'PROCESSING':
+            return Response({'success': False, 'message': 'Post is already currently publishing'}, status=status.HTTP_400_BAD_REQUEST)
+        post.status = 'PROCESSING'
+        post.save(update_fields=['status'])
         result = PublisherEngine.publish_post(post)
         return Response(result, status=status.HTTP_200_OK)
 
