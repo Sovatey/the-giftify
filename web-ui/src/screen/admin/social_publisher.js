@@ -69,6 +69,7 @@ const SocialPublisherScreen = () => {
   const [editingPost, setEditingPost] = useState(null);
   const [editingAccount, setEditingAccount] = useState(null);
   const [testingAccountId, setTestingAccountId] = useState(null);
+  const [testedAccounts, setTestedAccounts] = useState({});
   const [isConnectingTikTok, setIsConnectingTikTok] = useState(false);
 
   const [postForm] = Form.useForm();
@@ -168,6 +169,84 @@ const SocialPublisherScreen = () => {
     handleTikTokCallback();
   }, []);
 
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+const VIDEO_EXTS = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+
+const checkIsImage = (urlOrPath, mediaType) => {
+  if (urlOrPath) {
+    const clean = urlOrPath.toLowerCase().split('?')[0].split('#')[0];
+    if (IMAGE_EXTS.some(ext => clean.endsWith(ext))) return true;
+    if (VIDEO_EXTS.some(ext => clean.endsWith(ext))) return false;
+  }
+  return mediaType === 'IMAGE';
+};
+
+const checkIsVideo = (urlOrPath, mediaType) => {
+  if (urlOrPath) {
+    const clean = urlOrPath.toLowerCase().split('?')[0].split('#')[0];
+    if (VIDEO_EXTS.some(ext => clean.endsWith(ext))) return true;
+    if (IMAGE_EXTS.some(ext => clean.endsWith(ext))) return false;
+  }
+  return mediaType === 'VIDEO';
+};
+
+  // Helper to open Edit Post Modal with populated photo/video files
+  const openEditPostModal = (record) => {
+    setEditingPost(record);
+
+    let initialImages = [];
+    if (record.attachments && record.attachments.length > 0) {
+      const imgAtts = record.attachments.filter(a => checkIsImage(a.file_url || a.url, a.media_type));
+      initialImages = imgAtts.map((a, idx) => ({
+        uid: `att-${a.id || idx}`,
+        name: `Photo ${idx + 1}`,
+        status: 'done',
+        url: a.file_url || a.url
+      }));
+    } else if (record.image_file_url || record.image_url) {
+      const urlCandidate = record.image_file_url || record.image_url;
+      if (checkIsImage(urlCandidate, 'IMAGE')) {
+        initialImages = [{
+          uid: '-1',
+          name: 'Photo 1',
+          status: 'done',
+          url: urlCandidate
+        }];
+      }
+    }
+    setImageFileList(initialImages);
+
+    let initialVideos = [];
+    if (record.attachments && record.attachments.length > 0) {
+      const vidAtts = record.attachments.filter(a => checkIsVideo(a.file_url || a.url, a.media_type));
+      initialVideos = vidAtts.map((a, idx) => ({
+        uid: `vid-${a.id || idx}`,
+        name: `Video ${idx + 1}`,
+        status: 'done',
+        url: a.file_url || a.url
+      }));
+    } else if (record.video_file_url || record.video_url) {
+      const urlCandidate = record.video_file_url || record.video_url;
+      if (checkIsVideo(urlCandidate, 'VIDEO')) {
+        initialVideos = [{
+          uid: '-2',
+          name: 'Video 1',
+          status: 'done',
+          url: urlCandidate
+        }];
+      }
+    }
+    setVideoFileList(initialVideos);
+
+    postForm.setFieldsValue({
+      ...record,
+      account_ids: record.account_ids || [],
+      scheduled_at: record.scheduled_at ? dayjs(record.scheduled_at) : null,
+      daily_time: record.daily_time ? dayjs(record.daily_time, 'HH:mm:ss') : null,
+    });
+    setIsPostModalOpen(true);
+  };
+
   // Post Submission Handler
   const handleSavePost = async (values) => {
     try {
@@ -198,17 +277,26 @@ const SocialPublisherScreen = () => {
       if (values.image_url) formData.append('image_url', values.image_url);
       if (values.video_url) formData.append('video_url', values.video_url);
 
-      imageFileList.forEach((fileItem) => {
-        if (fileItem.originFileObj) {
-          formData.append('image_files', fileItem.originFileObj);
-        }
-      });
+      if (imageFileList.length > 0) {
+        imageFileList.forEach((fileItem) => {
+          if (fileItem.originFileObj) {
+            formData.append('image_files', fileItem.originFileObj);
+          } else if (fileItem.url && checkIsImage(fileItem.url, 'IMAGE') && !values.image_url) {
+            formData.append('image_url', fileItem.url);
+          }
+        });
+      }
 
-      videoFileList.forEach((fileItem) => {
-        if (fileItem.originFileObj) {
-          formData.append('video_files', fileItem.originFileObj);
-        }
-      });
+      if (videoFileList.length > 0) {
+        videoFileList.forEach((fileItem) => {
+          if (fileItem.originFileObj) {
+            formData.append('video_files', fileItem.originFileObj);
+          } else if (fileItem.url && checkIsVideo(fileItem.url, 'VIDEO') && !values.video_url) {
+            formData.append('video_url', fileItem.url);
+          }
+        });
+      }
+
 
       if (values.schedule_type === 'ONE_TIME' && values.scheduled_at) {
         formData.append('scheduled_at', values.scheduled_at.format('YYYY-MM-DD HH:mm:ss'));
@@ -309,12 +397,18 @@ const SocialPublisherScreen = () => {
     try {
       const res = await api.post(`/social/accounts/${accountId}/test-connection/`);
       if (res.data.success) {
-        message.success(res.data.message || 'Connection test successful!');
+        message.success({
+          content: res.data.message || 'Test connection successfully!',
+          icon: <CheckCircleOutlined style={{ color: '#52c41a' }} />
+        });
+        setTestedAccounts(prev => ({ ...prev, [accountId]: true }));
       } else {
         message.error(res.data.message || 'Connection test failed');
+        setTestedAccounts(prev => ({ ...prev, [accountId]: false }));
       }
     } catch (err) {
       message.error(err.response?.data?.message || 'Connection test failed');
+      setTestedAccounts(prev => ({ ...prev, [accountId]: false }));
     } finally {
       setTestingAccountId(null);
     }
@@ -351,6 +445,15 @@ const SocialPublisherScreen = () => {
       content: defaultCaption,
       image_url: firstImg
     });
+
+    if (firstImg) {
+      setImageFileList([{
+        uid: '-1',
+        name: selectedProds[0]?.product_name || 'Product Image',
+        status: 'done',
+        url: firstImg
+      }]);
+    }
 
     setIsProductPickerOpen(false);
     message.success(`Selected ${selectedProds.length} store items for post!`);
@@ -395,7 +498,6 @@ const SocialPublisherScreen = () => {
       }
     }
 
-
     // Fallback to platform list badges
     const platformArray = record.platforms || [];
     if (!platformArray || platformArray.length === 0) return <Tag>None</Tag>;
@@ -433,20 +535,32 @@ const SocialPublisherScreen = () => {
       title: 'Campaign Title & Caption',
       key: 'title',
       render: (_, record) => {
+        const firstAttImage = record.attachments?.find(a => a.media_type === 'IMAGE' || (a.file_url && !a.file_url.endsWith('.mp4')))?.file_url;
+        const imgUrl = record.image_file_url || record.image_url || firstAttImage;
         const attCount = record.attachments?.length || 0;
+
         return (
-          <div style={{ maxWidth: 280 }}>
-            <div style={{ fontWeight: 700, color: '#4a2e35', fontSize: 14 }}>{record.title}</div>
-            <div style={{ fontSize: 12, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {record.content}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', maxWidth: 300 }}>
+            {imgUrl ? (
+              <img src={imgUrl} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+            ) : (
+              <div style={{ width: 44, height: 44, borderRadius: 8, background: '#fff0f3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <PictureOutlined style={{ color: '#ff758c', fontSize: 20 }} />
+              </div>
+            )}
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ fontWeight: 700, color: '#4a2e35', fontSize: 14 }}>{record.title}</div>
+              <div style={{ fontSize: 12, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {record.content}
+              </div>
+              <Space size="small" style={{ marginTop: 2 }}>
+                {(imgUrl || attCount > 0) && (
+                  <Tag color="purple" style={{ fontSize: 10, borderRadius: 10 }}>
+                    🖼️ Photo ({attCount || 1})
+                  </Tag>
+                )}
+              </Space>
             </div>
-            <Space size="small" style={{ marginTop: 4 }}>
-              {(record.image_url || record.image_file_url || attCount > 0) && (
-                <Tag color="purple" style={{ fontSize: 10, borderRadius: 10 }}>
-                  🖼️ Multi-Photos ({attCount + (record.image_file_url || record.image_url ? 1 : 0)})
-                </Tag>
-              )}
-            </Space>
           </div>
         );
       }
@@ -551,16 +665,7 @@ const SocialPublisherScreen = () => {
             size="small"
             icon={<EditOutlined />}
             style={{ borderRadius: 8 }}
-            onClick={() => {
-              setEditingPost(record);
-              postForm.setFieldsValue({
-                ...record,
-                account_ids: record.account_ids || [],
-                scheduled_at: record.scheduled_at ? dayjs(record.scheduled_at) : null,
-                daily_time: record.daily_time ? dayjs(record.daily_time, 'HH:mm:ss') : null,
-              });
-              setIsPostModalOpen(true);
-            }}
+            onClick={() => openEditPostModal(record)}
           />
           <Popconfirm title="Delete this post schedule?" onConfirm={() => handleDeletePost(record.id)}>
             <Button danger size="small" icon={<DeleteOutlined />} style={{ borderRadius: 8 }} />
@@ -841,95 +946,97 @@ const SocialPublisherScreen = () => {
                                     No posts set for {day.label}
                                   </div>
                                 ) : (
-                                  dayPosts.map((p) => (
-                                    <div
-                                      key={p.id}
-                                      style={{
-                                        background: '#ffffff',
-                                        borderRadius: 14,
-                                        border: '1.5px solid #ffe4e6',
-                                        boxShadow: '0 4px 12px rgba(255, 117, 140, 0.06)',
-                                        padding: '12px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '8px'
-                                      }}
-                                    >
-                                      {/* Header row: Time & Status */}
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <Tag color="gold" style={{ fontSize: 11, borderRadius: 8, fontWeight: 700, margin: 0, padding: '1px 8px' }}>
-                                          ⏰ {p.daily_time || '09:00'}
-                                        </Tag>
-                                        <Tag color={p.status === 'PUBLISHED' ? 'green' : 'processing'} style={{ fontSize: 10, borderRadius: 6, margin: 0 }}>
-                                          {p.status}
-                                        </Tag>
-                                      </div>
+                                  dayPosts.map((p) => {
+                                    const firstAttImage = p.attachments?.find(a => a.media_type === 'IMAGE' || (a.file_url && !a.file_url.endsWith('.mp4')))?.file_url;
+                                    const imgUrl = p.image_file_url || p.image_url || firstAttImage;
 
-                                      {/* Target Channel Pills */}
-                                      <div>
-                                        {renderAccountBadges(p, true)}
-                                      </div>
+                                    return (
+                                      <div
+                                        key={p.id}
+                                        style={{
+                                          background: '#ffffff',
+                                          borderRadius: 14,
+                                          border: '1.5px solid #ffe4e6',
+                                          boxShadow: '0 4px 12px rgba(255, 117, 140, 0.06)',
+                                          padding: '12px',
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          gap: '8px'
+                                        }}
+                                      >
+                                        {/* Header row: Time & Status */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <Tag color="gold" style={{ fontSize: 11, borderRadius: 8, fontWeight: 700, margin: 0, padding: '1px 8px' }}>
+                                            ⏰ {p.daily_time || '09:00'}
+                                          </Tag>
+                                          <Tag color={p.status === 'PUBLISHED' ? 'green' : 'processing'} style={{ fontSize: 10, borderRadius: 6, margin: 0 }}>
+                                            {p.status}
+                                          </Tag>
+                                        </div>
 
-                                      {/* Media Format Indicator */}
-                                      <div style={{ marginTop: 2 }}>
-                                        <Tag color="magenta" style={{ fontSize: 9, borderRadius: 6, margin: 0, padding: '0 5px', fontWeight: 600 }}>
-                                          🎬 FB:{p.fb_post_type || 'FEED'} | TG:{p.telegram_post_type || 'PHOTO'} | TT:{p.tiktok_post_type === 'PHOTO_CAROUSEL' ? 'SLIDESHOW' : 'VIDEO'}
-                                        </Tag>
-                                      </div>
+                                        {/* Target Channel Pills */}
+                                        <div>
+                                          {renderAccountBadges(p, true)}
+                                        </div>
 
+                                        {/* Image Thumbnail Preview */}
+                                        {imgUrl && (
+                                          <div style={{ borderRadius: 10, overflow: 'hidden', height: 95, background: '#fff0f3', border: '1px solid #ffe4e6', margin: '2px 0' }}>
+                                            <img src={imgUrl} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                          </div>
+                                        )}
 
-                                      {/* Post Title */}
-                                      <div style={{ fontWeight: 800, color: '#4a2e35', fontSize: 13, lineHeight: '18px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                        {p.title}
-                                      </div>
+                                        {/* Media Format Indicator */}
+                                        <div>
+                                          <Tag color="magenta" style={{ fontSize: 9, borderRadius: 6, margin: 0, padding: '0 5px', fontWeight: 600 }}>
+                                            🎬 FB:{p.fb_post_type || 'FEED'} | TG:{p.telegram_post_type || 'PHOTO'} | TT:{p.tiktok_post_type === 'PHOTO_CAROUSEL' ? 'SLIDESHOW' : 'VIDEO'}
+                                          </Tag>
+                                        </div>
 
-                                      <div style={{ fontSize: 11, color: '#777', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {p.content}
-                                      </div>
+                                        {/* Post Title */}
+                                        <div style={{ fontWeight: 800, color: '#4a2e35', fontSize: 13, lineHeight: '18px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                          {p.title}
+                                        </div>
 
-                                      {/* Action Buttons Row */}
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 8, borderTop: '1px dashed #ffe4e6' }}>
-                                        <Button
-                                          type="primary"
-                                          size="small"
-                                          icon={<ThunderboltOutlined />}
-                                          style={{
-                                            background: 'linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)',
-                                            border: 'none',
-                                            fontSize: 11,
-                                            borderRadius: 8,
-                                            fontWeight: 700,
-                                            boxShadow: '0 2px 6px rgba(255,117,140,0.3)',
-                                            padding: '0 8px'
-                                          }}
-                                          onClick={() => handlePublishNow(p.id)}
-                                        >
-                                          Post Now
-                                        </Button>
+                                        <div style={{ fontSize: 11, color: '#777', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {p.content}
+                                        </div>
 
-                                        <Space size={2}>
+                                        {/* Action Buttons Row */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 8, borderTop: '1px dashed #ffe4e6' }}>
                                           <Button
+                                            type="primary"
                                             size="small"
-                                            type="text"
-                                            icon={<EditOutlined style={{ color: '#4a2e35' }} />}
-                                            onClick={() => {
-                                              setEditingPost(p);
-                                              postForm.setFieldsValue({
-                                                ...p,
-                                                account_ids: p.account_ids || [],
-                                                scheduled_at: p.scheduled_at ? dayjs(p.scheduled_at) : null,
-                                                daily_time: p.daily_time ? dayjs(p.daily_time, 'HH:mm:ss') : null,
-                                              });
-                                              setIsPostModalOpen(true);
+                                            icon={<ThunderboltOutlined />}
+                                            style={{
+                                              background: 'linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)',
+                                              border: 'none',
+                                              fontSize: 11,
+                                              borderRadius: 8,
+                                              fontWeight: 700,
+                                              boxShadow: '0 2px 6px rgba(255,117,140,0.3)',
+                                              padding: '0 8px'
                                             }}
-                                          />
-                                          <Popconfirm title="Delete?" onConfirm={() => handleDeletePost(p.id)}>
-                                            <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-                                          </Popconfirm>
-                                        </Space>
+                                            onClick={() => handlePublishNow(p.id)}
+                                          >
+                                            Post Now
+                                          </Button>
+
+                                          <Space size={2}>
+                                            <Button
+                                              size="small"
+                                              type="text"
+                                              icon={<EditOutlined style={{ color: '#4a2e35' }} />}
+                                              onClick={() => openEditPostModal(p)}
+                                            />
+                                            <Popconfirm title="Delete?" onConfirm={() => handleDeletePost(p.id)}>
+                                              <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                                            </Popconfirm>
+                                          </Space>
+                                        </div>
                                       </div>
-                                    </div>
-                                  ))
+                                    );
+                                  })
                                 )}
                               </div>
                             </div>
@@ -1003,9 +1110,16 @@ const SocialPublisherScreen = () => {
                                   </div>
                                 }
                                 extra={
-                                  <Tag color={acc.is_active ? 'green' : 'red'} style={{ margin: 0, borderRadius: 8 }}>
-                                    {acc.is_active ? 'Active' : 'Inactive'}
-                                  </Tag>
+                                  <Space size={4}>
+                                    {testedAccounts[acc.id] && (
+                                      <Tag color="success" icon={<CheckCircleOutlined />} style={{ margin: 0, borderRadius: 8, fontSize: 11 }}>
+                                        Verified
+                                      </Tag>
+                                    )}
+                                    <Tag color={acc.is_active ? 'green' : 'red'} style={{ margin: 0, borderRadius: 8 }}>
+                                      {acc.is_active ? 'Active' : 'Inactive'}
+                                    </Tag>
+                                  </Space>
                                 }
                                 style={{ borderRadius: 16, border: '1px solid #ffe4e6', boxShadow: '0 4px 14px rgba(0,0,0,0.02)' }}
                               >
@@ -1040,12 +1154,20 @@ const SocialPublisherScreen = () => {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
                                   <Button
                                     size="small"
-                                    type="dashed"
+                                    type={testedAccounts[acc.id] ? "default" : "dashed"}
+                                    icon={testedAccounts[acc.id] ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : null}
                                     loading={testingAccountId === acc.id}
                                     onClick={() => handleTestConnection(acc.id)}
-                                    style={{ borderRadius: 8, fontSize: 11, padding: '0 8px' }}
+                                    style={{
+                                      borderRadius: 8,
+                                      fontSize: 11,
+                                      padding: '0 8px',
+                                      borderColor: testedAccounts[acc.id] ? '#52c41a' : undefined,
+                                      color: testedAccounts[acc.id] ? '#27ae60' : undefined,
+                                      fontWeight: testedAccounts[acc.id] ? 700 : 400
+                                    }}
                                   >
-                                    Test Connection
+                                    {testedAccounts[acc.id] ? 'Connected ✓' : 'Test Connection'}
                                   </Button>
                                   <Space size={4}>
                                     <Button
@@ -1074,7 +1196,6 @@ const SocialPublisherScreen = () => {
                             </Col>
                           ))
                         )}
-
                       </Row>
                     </div>
                   )
@@ -1190,7 +1311,7 @@ const SocialPublisherScreen = () => {
                   <Row gutter={[12, 12]}>
                     {accounts.map(acc => {
                       const icon = acc.platform === 'facebook' ? <FacebookOutlined style={{ color: '#1877F2', fontSize: 18 }} /> : acc.platform === 'telegram' ? <SendOutlined style={{ color: '#229ED9', fontSize: 18 }} /> : <ShareAltOutlined style={{ color: '#000', fontSize: 18 }} />;
-                      const platformBg = acc.platform === 'facebook' ? '#e8f4ff' : acc.platform === 'telegram' ? '#e6f7ff' : '#f5f5f5';
+                      const platformBg = acc.platform === 'facebook' ? '#e8f4ff' : acc.platform === 'telegram' ? '#e6f6ff' : '#f5f5f5';
 
                       return (
                         <Col span={12} key={acc.id}>
@@ -1287,7 +1408,6 @@ const SocialPublisherScreen = () => {
                 label="Scheduling Mode"
                 rules={[{ required: true, message: 'Select scheduling mode' }]}
               >
-
                 <Select
                   style={{ borderRadius: 10 }}
                   options={[

@@ -1,3 +1,5 @@
+from datetime import datetime
+from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -206,6 +208,15 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             except Exception:
                 data['account_ids'] = [data['account_ids']]
 
+        if data.get('scheduled_at') and isinstance(data['scheduled_at'], str):
+            try:
+                dt_str = data['scheduled_at']
+                parsed_dt = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+                tz = timezone.get_current_timezone()
+                data['scheduled_at'] = timezone.make_aware(parsed_dt, tz)
+            except Exception:
+                pass
+
         return data
 
 
@@ -241,6 +252,9 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             post.status = 'SCHEDULED'
             post.last_published_at = None
             post.save()
+
+        if 'image_files' in request.FILES or 'video_files' in request.FILES:
+            post.attachments.all().delete()
 
         self._process_multi_attachments(request, post)
 

@@ -20,16 +20,21 @@ def resolve_local_file_path(url_or_path, file_obj=None):
             pass
 
     if isinstance(url_or_path, str):
-        if url_or_path.startswith('/media/'):
-            rel = url_or_path.replace('/media/', '', 1)
-            full_p = os.path.join(settings.MEDIA_ROOT, rel)
-            if os.path.exists(full_p):
-                return full_p
-        elif '/media/' in url_or_path:
+        rel = None
+        if '/media/' in url_or_path:
             rel = url_or_path.split('/media/')[-1]
-            full_p = os.path.join(settings.MEDIA_ROOT, rel)
+        elif url_or_path.startswith('/'):
+            rel = url_or_path.lstrip('/')
+
+        if rel:
+            clean_rel = rel.lstrip('/\\')
+            full_p = os.path.join(str(settings.MEDIA_ROOT), clean_rel)
             if os.path.exists(full_p):
                 return full_p
+            alt_p = os.path.join(str(settings.BASE_DIR), 'media', clean_rel)
+            if os.path.exists(alt_p):
+                return alt_p
+
     return None
 
 def get_all_media_items(post: SocialPost, media_type='image'):
@@ -38,7 +43,7 @@ def get_all_media_items(post: SocialPost, media_type='image'):
 
     all_attachments = list(post.attachments.all()) if post.pk else []
 
-    # 1. Attachments Gallery (If present, this is the primary source of media items)
+    # 1. Attachments Gallery
     for att in all_attachments:
         file_url = att.file.url if att.file else att.url
         if not file_url:
@@ -47,67 +52,67 @@ def get_all_media_items(post: SocialPost, media_type='image'):
         url_str = f"{base_domain}{file_url}" if file_url.startswith('/') else file_url
         file_path = resolve_local_file_path(file_url, att.file)
 
-        is_vid = file_url.lower().endswith(VIDEO_EXTENSIONS) or att.media_type == 'VIDEO'
-        is_img = file_url.lower().endswith(IMAGE_EXTENSIONS) or att.media_type == 'IMAGE'
+        ext = os.path.splitext(file_url.lower().split('?')[0])[1]
 
-        if file_url.lower().endswith(IMAGE_EXTENSIONS):
-            is_vid = False
+        if ext in IMAGE_EXTENSIONS:
             is_img = True
+            is_vid = False
+        elif ext in VIDEO_EXTENSIONS:
+            is_vid = True
+            is_img = False
+        else:
+            is_vid = (att.media_type == 'VIDEO')
+            is_img = (att.media_type == 'IMAGE')
 
         if media_type == 'image' and is_img:
             items.append({'type': 'image', 'file_path': file_path, 'url': url_str})
         elif media_type == 'video' and is_vid:
             items.append({'type': 'video', 'file_path': file_path, 'url': url_str})
 
-    # 2. Single Image/Video fields on Post (Only add if NO attachments match)
+    # 2. Single Image/Video fields on Post (Only add if NO attachments matched)
     if not items:
         if media_type == 'image':
             if post.image_file:
-                path = resolve_local_file_path(post.image_file.url, post.image_file)
-                url = f"{base_domain}{post.image_file.url}" if post.image_file.url.startswith('/') else post.image_file.url
-                items.append({'type': 'image', 'file_path': path, 'url': url})
+                ext = os.path.splitext(post.image_file.url.lower().split('?')[0])[1]
+                if ext in IMAGE_EXTENSIONS or not ext:
+                    path = resolve_local_file_path(post.image_file.url, post.image_file)
+                    url = f"{base_domain}{post.image_file.url}" if post.image_file.url.startswith('/') else post.image_file.url
+                    items.append({'type': 'image', 'file_path': path, 'url': url})
             elif post.image_url:
-                url_str = post.image_url
-                path = resolve_local_file_path(url_str)
-                if url_str.startswith('/'):
-                    url_str = f"{base_domain}{url_str}"
-                items.append({'type': 'image', 'file_path': path, 'url': url_str})
+                ext = os.path.splitext(post.image_url.lower().split('?')[0])[1]
+                if ext in IMAGE_EXTENSIONS or not ext:
+                    url_str = post.image_url
+                    path = resolve_local_file_path(url_str)
+                    if url_str.startswith('/'):
+                        url_str = f"{base_domain}{url_str}"
+                    items.append({'type': 'image', 'file_path': path, 'url': url_str})
 
         elif media_type == 'video':
             if post.video_file:
-                path = resolve_local_file_path(post.video_file.url, post.video_file)
-                url = f"{base_domain}{post.video_file.url}" if post.video_file.url.startswith('/') else post.video_file.url
-                items.append({'type': 'video', 'file_path': path, 'url': url})
+                ext = os.path.splitext(post.video_file.url.lower().split('?')[0])[1]
+                if ext in VIDEO_EXTENSIONS or not ext:
+                    path = resolve_local_file_path(post.video_file.url, post.video_file)
+                    url = f"{base_domain}{post.video_file.url}" if post.video_file.url.startswith('/') else post.video_file.url
+                    items.append({'type': 'video', 'file_path': path, 'url': url})
             elif post.video_url:
-                url_str = post.video_url
-                path = resolve_local_file_path(url_str)
-                if url_str.startswith('/'):
-                    url_str = f"{base_domain}{url_str}"
-                items.append({'type': 'video', 'file_path': path, 'url': url_str})
+                ext = os.path.splitext(post.video_url.lower().split('?')[0])[1]
+                if ext in VIDEO_EXTENSIONS or not ext:
+                    url_str = post.video_url
+                    path = resolve_local_file_path(url_str)
+                    if url_str.startswith('/'):
+                        url_str = f"{base_domain}{url_str}"
+                    items.append({'type': 'video', 'file_path': path, 'url': url_str})
 
-    # 3. Robust Deduplication by normalized filename / URL key
+    # 3. Strict Deduplication by filename or URL path
     seen = set()
     unique_items = []
     for item in items:
-        filename_key = os.path.basename(item['file_path']) if item.get('file_path') else item['url'].split('/')[-1]
-        
-        # Normalize Django auto-incremented file suffixes (e.g., photo_1.jpg -> photo.jpg)
-        parts = filename_key.rsplit('.', 1)
-        if len(parts) == 2:
-            base_name, ext = parts[0], parts[1]
-            if '_' in base_name and base_name.rsplit('_', 1)[-1].isdigit():
-                base_name = base_name.rsplit('_', 1)[0]
-            normalized_key = f"{base_name}.{ext}".lower()
-        else:
-            normalized_key = filename_key.lower()
+        raw_key = os.path.basename(item['file_path']) if item.get('file_path') else item['url'].split('/')[-1].split('?')[0]
+        clean_key = raw_key.lower()
 
-        if normalized_key not in seen:
-            seen.add(normalized_key)
+        if clean_key not in seen:
+            seen.add(clean_key)
             unique_items.append(item)
-
-    return unique_items
-
-
 
     return unique_items
 
@@ -117,7 +122,7 @@ class FacebookPublisher:
     def publish(account: SocialAccount, post: SocialPost):
         image_items = get_all_media_items(post, 'image')
         video_items = get_all_media_items(post, 'video')
-        post_type = post.fb_post_type or 'FEED'
+        post_type = post.fb_post_type or ('REEL' if video_items else 'FEED')
 
         media_count = len(image_items) + len(video_items)
 
@@ -133,25 +138,22 @@ class FacebookPublisher:
         access_token = account.access_token
         
         try:
-            if post_type == 'REEL' or video_items:
-                # Facebook Video / Reels Upload endpoint
+            if video_items:
                 url = f"https://graph.facebook.com/v19.0/{page_id}/videos"
                 data = {
                     'description': f"{post.title}\n\n{post.content}",
                     'access_token': access_token
                 }
                 
-                vid_item = video_items[0] if video_items else None
-                if vid_item and vid_item.get('file_path') and os.path.exists(vid_item['file_path']):
+                vid_item = video_items[0]
+                if vid_item.get('file_path') and os.path.exists(vid_item['file_path']):
                     with open(vid_item['file_path'], 'rb') as vf:
                         response = requests.post(url, data=data, files={'source': vf}, timeout=60)
                 else:
-                    video_url = vid_item['url'] if vid_item else ''
-                    data['file_url'] = video_url
+                    data['file_url'] = vid_item['url']
                     response = requests.post(url, data=data, timeout=60)
 
             elif len(image_items) > 1:
-                # Multi-photo album post (upload photos unpublished first, then attach to feed post)
                 photo_ids = []
                 for item in image_items:
                     upload_url = f"https://graph.facebook.com/v19.0/{page_id}/photos"
@@ -174,7 +176,6 @@ class FacebookPublisher:
                 response = requests.post(url, json=payload, timeout=20)
 
             elif image_items:
-                # Single photo post
                 url = f"https://graph.facebook.com/v19.0/{page_id}/photos"
                 data = {
                     'caption': f"{post.title}\n\n{post.content}",
@@ -189,7 +190,6 @@ class FacebookPublisher:
                     response = requests.post(url, data=data, timeout=30)
 
             else:
-                # Standard text feed
                 url = f"https://graph.facebook.com/v19.0/{page_id}/feed"
                 data = {
                     'message': f"{post.title}\n\n{post.content}",
@@ -204,14 +204,14 @@ class FacebookPublisher:
                 return {
                     'success': True,
                     'external_id': ext_id,
-                    'message': f'Successfully published Facebook {post_type}'
+                    'message': f'Successfully published Facebook post'
                 }
             else:
                 err_msg = res_data.get('error', {}).get('message', response.text)
                 return {
                     'success': False,
                     'external_id': None,
-                    'message': f"Facebook API Error ({post_type}): {err_msg}"
+                    'message': f"Facebook API Error: {err_msg}"
                 }
         except Exception as e:
             return {
@@ -229,12 +229,13 @@ class TelegramPublisher:
         image_items = get_all_media_items(post, 'image')
         video_items = get_all_media_items(post, 'video')
         all_items = image_items + video_items
-        post_type = post.telegram_post_type or ('VIDEO' if video_items else 'PHOTO' if image_items else 'TEXT')
-
+        
+        # Dynamically determine media type based on actual attached files
+        actual_type = 'VIDEO' if video_items else 'PHOTO' if image_items else 'TEXT'
         total_media_count = len(all_items)
 
         if account.is_simulated or not bot_token or not chat_id:
-            msg_type = f"Media Album ({total_media_count} files)" if total_media_count > 1 else post_type
+            msg_type = f"Media Album ({total_media_count} files)" if total_media_count > 1 else actual_type
             return {
                 'success': True,
                 'external_id': f"sim_tg_{int(timezone.now().timestamp())}",
@@ -276,7 +277,7 @@ class TelegramPublisher:
                 response = requests.post(url, data=data, files=files if files else None, timeout=30)
 
             # 2. Single Video (sendVideo)
-            elif post_type == 'VIDEO' and video_items:
+            elif actual_type == 'VIDEO' and video_items:
                 url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
                 data = {
                     'chat_id': chat_id,
@@ -293,7 +294,7 @@ class TelegramPublisher:
                     response = requests.post(url, data=data, timeout=30)
 
             # 3. Single Photo (sendPhoto)
-            elif post_type == 'PHOTO' and image_items:
+            elif actual_type == 'PHOTO' and image_items:
                 url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
                 data = {
                     'chat_id': chat_id,
