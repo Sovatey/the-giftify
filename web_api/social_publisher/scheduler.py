@@ -100,10 +100,6 @@ def check_and_publish_due_posts():
 
 def start_scheduler():
     global scheduler
-    if not BackgroundScheduler:
-        print("[SocialPublisher] Background scheduler disabled (apscheduler library not installed).")
-        return
-
     if scheduler and scheduler.running:
         return
 

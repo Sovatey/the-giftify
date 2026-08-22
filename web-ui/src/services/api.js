@@ -10,12 +10,21 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to attach token
+// Request interceptor to attach token and selected company context
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Token ${token}`;
+    }
+    const companyId = localStorage.getItem('selectedCompanyId');
+    // Attach company_id filter to data requests, but NOT when fetching all companies list
+    if (companyId && !config.url?.includes('/user/companies/')) {
+      config.headers['X-Company-ID'] = companyId;
+      config.params = {
+        ...(config.params || {}),
+        company_id: companyId,
+      };
     }
     return config;
   },

@@ -1,6 +1,7 @@
 from datetime import datetime
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -35,7 +36,10 @@ def make_aware_scheduled_at(val):
     return val
 
 
-class SocialAccountViewSet(viewsets.ModelViewSet):
+from utils.tenant_mixin import TenantViewSetMixin
+
+
+class SocialAccountViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
     queryset = SocialAccount.objects.all().order_by('-created_at')
     serializer_class = SocialAccountSerializer
     permission_classes = [AllowAny]
@@ -177,7 +181,7 @@ class SocialAccountViewSet(viewsets.ModelViewSet):
             return Response({'success': False, 'message': f"TikTok OAuth Exception: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class SocialPostViewSet(viewsets.ModelViewSet):
+class SocialPostViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
     queryset = SocialPost.objects.all().order_by('-created_at')
     serializer_class = SocialPostSerializer
     permission_classes = [AllowAny]
@@ -241,6 +245,17 @@ class SocialPostViewSet(viewsets.ModelViewSet):
 
         if data.get('scheduled_at'):
             data['scheduled_at'] = make_aware_scheduled_at(data['scheduled_at'])
+
+        if not data.get('company'):
+            comp_id = (
+                request.data.get('company_id') or
+                request.query_params.get('company_id') or
+                (request.headers.get('X-Company-ID') if hasattr(request, 'headers') else None) or
+                (request.headers.get('x-company-id') if hasattr(request, 'headers') else None) or
+                getattr(request.user, 'company_id', None)
+            )
+            if comp_id:
+                data['company'] = comp_id
 
         return data
 
@@ -320,6 +335,7 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             target_date = original_post.scheduled_at
 
         new_post = SocialPost.objects.create(
+            company=original_post.company,
             title=title or original_post.title,
             content=original_post.content,
             image_url=original_post.image_url,
@@ -386,7 +402,39 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(post).data, status=status.HTTP_200_OK)
 
 
-class SocialPostLogViewSet(viewsets.ReadOnlyModelViewSet):
+class SocialPostLogViewSet(TenantViewSetMixin, viewsets.ReadOnlyModelViewSet):
     queryset = SocialPostLog.objects.all().order_by('-executed_at')
     serializer_class = SocialPostLogSerializer
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = getattr(self.request, 'user', None)
+
+        company_id = (
+            self.request.query_params.get('company_id') or 
+            (self.request.headers.get('X-Company-ID') if hasattr(self.request, 'headers') else None) or
+            (self.request.headers.get('x-company-id') if hasattr(self.request, 'headers') else None) or
+            (self.request.META.get('HTTP_X_COMPANY_ID') if hasattr(self.request, 'META') else None)
+        )
+
+        if user and user.is_authenticated and getattr(user, 'is_superuser', False):
+            if company_id and company_id != '':
+                try:
+                    cid = int(company_id)
+                    return queryset.filter(Q(company_id=cid) | Q(post__company_id=cid) | Q(post__company__isnull=True))
+                except (ValueError, TypeError):
+                    pass
+            return queryset
+
+        if user and user.is_authenticated and getattr(user, 'company_id', None):
+            return queryset.filter(Q(company_id=user.company_id) | Q(post__company_id=user.company_id) | Q(post__company__isnull=True))
+
+        if company_id and company_id != '':
+            try:
+                cid = int(company_id)
+                return queryset.filter(Q(company_id=cid) | Q(post__company_id=cid) | Q(post__company__isnull=True))
+            except (ValueError, TypeError):
+                pass
+
+        return queryset

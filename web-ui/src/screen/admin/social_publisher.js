@@ -16,6 +16,7 @@ import {
 import dayjs from 'dayjs';
 import Sidebar from '../sidebar';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const { Content } = Layout;
 const { TextArea } = Input;
@@ -51,13 +52,43 @@ const generateCodeChallenge = async (codeVerifier) => {
 };
 
 const SocialPublisherScreen = () => {
+  const { user, role } = useAuth();
+  const [companies, setCompanies] = useState([]);
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState(null);
+
   const [activeTab, setActiveTab] = useState('calendar');
   const [calendarViewMode, setCalendarViewMode] = useState('card'); // 'card' | 'list'
   const [loading, setLoading] = useState(false);
+  const [postSubmitting, setPostSubmitting] = useState(false);
+  const [accountSubmitting, setAccountSubmitting] = useState(false);
+  const [copySubmitting, setCopySubmitting] = useState(false);
   const [posts, setPosts] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [logs, setLogs] = useState([]);
   const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    if (user?.is_superuser || role === 'Admin') {
+      api.get('/user/companies/').then(res => {
+        setCompanies(res.data.results || res.data || []);
+      }).catch(() => {});
+    }
+  }, [user, role]);
+
+  const filteredAccounts = accounts.filter(a => {
+    if (!selectedCompanyFilter) return true;
+    return a.company === selectedCompanyFilter || a.company_name === selectedCompanyFilter;
+  });
+
+  const filteredPosts = posts.filter(p => {
+    if (!selectedCompanyFilter) return true;
+    return p.company === selectedCompanyFilter || p.company_name === selectedCompanyFilter;
+  });
+
+  const filteredLogs = logs.filter(l => {
+    if (!selectedCompanyFilter) return true;
+    return l.company === selectedCompanyFilter || l.company_name === selectedCompanyFilter;
+  });
 
   // File Upload state
   const [imageFileList, setImageFileList] = useState([]);
@@ -407,6 +438,7 @@ const SocialPublisherScreen = () => {
 
   // Post Submission Handler
   const handleSavePost = async (values) => {
+    setPostSubmitting(true);
     try {
       const formData = new FormData();
       formData.append('title', values.title);
@@ -416,6 +448,11 @@ const SocialPublisherScreen = () => {
       formData.append('fb_post_type', values.fb_post_type || 'FEED');
       formData.append('tiktok_post_type', values.tiktok_post_type || 'PHOTO_CAROUSEL');
       formData.append('telegram_post_type', values.telegram_post_type || 'PHOTO');
+
+      const currentCompanyId = selectedCompanyFilter || localStorage.getItem('selectedCompanyId') || user?.company;
+      if (currentCompanyId) {
+        formData.append('company', currentCompanyId);
+      }
 
       // Specific Account IDs
       const selectedAccIds = values.account_ids || [];
@@ -455,7 +492,6 @@ const SocialPublisherScreen = () => {
         });
       }
 
-
       if (values.schedule_type === 'ONE_TIME' && values.scheduled_at) {
         formData.append('scheduled_at', values.scheduled_at.format('YYYY-MM-DD HH:mm:ss'));
       }
@@ -488,6 +524,8 @@ const SocialPublisherScreen = () => {
     } catch (err) {
       console.error(err);
       message.error('Failed to save post');
+    } finally {
+      setPostSubmitting(false);
     }
   };
 
@@ -508,13 +546,39 @@ const SocialPublisherScreen = () => {
     }
   };
 
-  // Delete Post
-  const handleDeletePost = async (postId) => {
+  // Smart Delete Post: If post is recurring on multiple days and deleted from a specific day, remove only that day from recurring_days list!
+  const handleDeletePost = async (postOrId, dayValue = null) => {
     try {
-      await api.delete(`/social/posts/${postId}/`);
-      message.success('Post schedule deleted');
+      const postObj = typeof postOrId === 'object' ? postOrId : posts.find(p => p.id === postOrId);
+      if (!postObj) {
+        if (typeof postOrId !== 'object') await api.delete(`/social/posts/${postOrId}/`);
+        fetchData();
+        return;
+      }
+
+      const recDays = postObj.recurring_days || [];
+      if (dayValue && postObj.schedule_type === 'WEEKLY_RECURRING' && recDays.length > 1 && recDays.includes(dayValue)) {
+        const updatedDays = recDays.filter(d => d !== dayValue);
+        const formData = new FormData();
+        formData.append('title', postObj.title);
+        formData.append('content', postObj.content || '');
+        formData.append('schedule_type', 'WEEKLY_RECURRING');
+        formData.append('recurring_days', JSON.stringify(updatedDays));
+        if (postObj.daily_time) formData.append('daily_time', postObj.daily_time);
+        if (postObj.account_ids) formData.append('account_ids', JSON.stringify(postObj.account_ids));
+        if (postObj.platforms) formData.append('platforms', JSON.stringify(postObj.platforms));
+
+        await api.put(`/social/posts/${postObj.id}/`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        message.success(`Removed post schedule from ${dayValue}`);
+      } else {
+        await api.delete(`/social/posts/${postObj.id}/`);
+        message.success('Post schedule deleted');
+      }
       fetchData();
     } catch (err) {
+      console.error(err);
       message.error('Failed to delete post');
     }
   };
@@ -669,14 +733,14 @@ const SocialPublisherScreen = () => {
   };
 
   // Statistics calculation
-  const recurringCount = posts.filter(p => (p.schedule_type === 'DAILY_RECURRING' || p.schedule_type === 'WEEKLY_RECURRING') && p.is_active).length;
-  const scheduledCount = posts.filter(p => p.schedule_type === 'ONE_TIME' && p.status === 'SCHEDULED').length;
-  const successLogCount = logs.filter(l => l.status === 'SUCCESS').length;
-  const successRate = logs.length > 0 ? Math.round((successLogCount / logs.length) * 100) : 100;
+  const recurringCount = filteredPosts.filter(p => (p.schedule_type === 'DAILY_RECURRING' || p.schedule_type === 'WEEKLY_RECURRING') && p.is_active).length;
+  const scheduledCount = filteredPosts.filter(p => p.schedule_type === 'ONE_TIME' && p.status === 'SCHEDULED').length;
+  const successLogCount = filteredLogs.filter(l => l.status === 'SUCCESS').length;
+  const successRate = filteredLogs.length > 0 ? Math.round((successLogCount / filteredLogs.length) * 100) : 100;
 
   // Filter Posts for Specific Day of Week for Calendar View
   const getPostsForDay = (dayValue) => {
-    return posts.filter(p => {
+    return filteredPosts.filter(p => {
       if (!p.is_active) return false;
       if (p.schedule_type === 'DAILY_RECURRING') return true;
       if (p.schedule_type === 'WEEKLY_RECURRING') {
@@ -727,6 +791,16 @@ const SocialPublisherScreen = () => {
       title: 'Target Accounts',
       key: 'accounts',
       render: (_, record) => renderAccountBadges(record, false)
+    },
+    {
+      title: 'Store Company',
+      dataIndex: 'company_name',
+      key: 'company_name',
+      render: (cName) => (
+        <Tag color="blue" style={{ borderRadius: 10, fontWeight: 700 }}>
+          🏬 {cName || 'The Giftify'}
+        </Tag>
+      )
     },
     {
       title: 'Schedule Mode & Days',
@@ -860,6 +934,16 @@ const SocialPublisherScreen = () => {
       }
     },
     {
+      title: 'Store Company',
+      dataIndex: 'company_name',
+      key: 'company_name',
+      render: (cName) => (
+        <Tag color="blue" style={{ borderRadius: 10, fontWeight: 700 }}>
+          🏬 {cName || 'The Giftify'}
+        </Tag>
+      )
+    },
+    {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
@@ -912,6 +996,18 @@ const SocialPublisherScreen = () => {
               </p>
             </div>
             <Space wrap>
+              {(user?.is_superuser || role === 'Admin') && (
+                <Select
+                  placeholder="Filter by Store Company"
+                  allowClear
+                  onChange={(val) => setSelectedCompanyFilter(val)}
+                  style={{ width: 220, borderRadius: 12 }}
+                >
+                  {companies.map(c => (
+                    <Select.Option key={c.id} value={c.id}>🏬 {c.name}</Select.Option>
+                  ))}
+                </Select>
+              )}
               <Button
                 type="default"
                 icon={<ReloadOutlined />}
@@ -965,7 +1061,7 @@ const SocialPublisherScreen = () => {
               <Card style={{ borderRadius: 16, border: '1px solid rgba(255,174,173,0.3)', background: 'white' }}>
                 <Statistic
                   title={<span style={{ fontWeight: 600, color: '#666', fontSize: 12 }}>Connected Channels</span>}
-                  value={accounts.length}
+                  value={filteredAccounts.length}
                   prefix={<SettingOutlined style={{ color: '#ff758c' }} />}
                   valueStyle={{ color: '#4a2e35', fontWeight: 800, fontSize: 22 }}
                 />
@@ -1227,7 +1323,7 @@ const SocialPublisherScreen = () => {
                                                 onClick={() => openEditPostModal(p)}
                                               />
                                             </Tooltip>
-                                            <Popconfirm title="Delete?" onConfirm={() => handleDeletePost(p.id)}>
+                                            <Popconfirm title="Delete?" onConfirm={() => handleDeletePost(p, day.value)}>
                                               <Button
                                                 size="small"
                                                 type="text"
@@ -1335,7 +1431,7 @@ const SocialPublisherScreen = () => {
                                               icon={<EditOutlined style={{ color: '#4a2e35' }} />}
                                               onClick={() => openEditPostModal(p)}
                                             />
-                                            <Popconfirm title="Delete?" onConfirm={() => handleDeletePost(p.id)}>
+                                            <Popconfirm title="Delete?" onConfirm={() => handleDeletePost(p, day.value)}>
                                               <Button size="small" type="text" danger icon={<DeleteOutlined />} />
                                             </Popconfirm>
                                           </Space>
@@ -1354,11 +1450,11 @@ const SocialPublisherScreen = () => {
                 },
                 {
                   key: '1',
-                  label: <span><ClockCircleOutlined /> Active Campaigns List ({posts.length})</span>,
+                  label: <span><ClockCircleOutlined /> Active Campaigns List ({filteredPosts.length})</span>,
                   children: (
                     <Table
                       columns={postColumns}
-                      dataSource={posts}
+                      dataSource={filteredPosts}
                       rowKey="id"
                       loading={loading}
                       scroll={{ x: 800 }}
@@ -1368,7 +1464,7 @@ const SocialPublisherScreen = () => {
                 },
                 {
                   key: '2',
-                  label: <span><SettingOutlined /> Channel API Credentials ({accounts.length})</span>,
+                  label: <span><SettingOutlined /> Channel API Credentials ({filteredAccounts.length})</span>,
                   children: (
                     <div>
                       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1391,7 +1487,7 @@ const SocialPublisherScreen = () => {
                       </div>
 
                       <Row gutter={[16, 16]}>
-                        {accounts.length === 0 ? (
+                        {filteredAccounts.length === 0 ? (
                           <Col span={24}>
                             <Card style={{ textAlign: 'center', padding: 30, borderRadius: 16, background: '#fff0f3' }}>
                               <SettingOutlined style={{ fontSize: 36, color: '#ff758c', marginBottom: 12 }} />
@@ -1400,7 +1496,7 @@ const SocialPublisherScreen = () => {
                             </Card>
                           </Col>
                         ) : (
-                          accounts.map((acc) => (
+                          filteredAccounts.map((acc) => (
                             <Col xs={24} sm={12} md={12} lg={8} xl={6} key={acc.id}>
                               <Card
                                 title={
@@ -1508,11 +1604,11 @@ const SocialPublisherScreen = () => {
                 },
                 {
                   key: '3',
-                  label: <span><HistoryOutlined /> Auto-Posting Execution Logs ({logs.length})</span>,
+                  label: <span><HistoryOutlined /> Auto-Posting Execution Logs ({filteredLogs.length})</span>,
                   children: (
                     <Table
                       columns={logColumns}
-                      dataSource={logs}
+                      dataSource={filteredLogs}
                       rowKey="id"
                       loading={loading}
                       scroll={{ x: 800 }}
@@ -1807,7 +1903,8 @@ const SocialPublisherScreen = () => {
                 <Button
                   type="primary"
                   htmlType="submit"
-                  style={{ background: '#ff758c', borderColor: '#ff758c', borderRadius: 10, padding: '0 24px' }}
+                  loading={postSubmitting}
+                  style={{ background: '#ff758c', borderColor: '#ff758c', borderRadius: 10, padding: '0 24px', fontWeight: 700 }}
                 >
                   Save Post Schedule
                 </Button>

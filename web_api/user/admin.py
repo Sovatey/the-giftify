@@ -1,12 +1,19 @@
 from django.contrib import admin
-from .models import User, UserGroup, UserRoutes, UserPermission
+from .models import User, UserGroup, UserRoutes, UserPermission, Company
+
+
+@admin.register(Company)
+class CompanyAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'code', 'phone', 'email', 'is_active', 'created_at')
+    search_fields = ('name', 'code', 'email', 'phone')
+    list_filter = ('is_active',)
 
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ('id', 'username', 'email', 'name', 'group', 'is_active', 'created_date')
+    list_display = ('id', 'username', 'email', 'name', 'group', 'company', 'is_active', 'created_date')
     search_fields = ('username', 'email', 'name')
-    list_filter = ('is_active', 'group')
+    list_filter = ('is_active', 'group', 'company')
 
 
 @admin.register(UserGroup)

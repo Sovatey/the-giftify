@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import SocialAccount, SocialPost, SocialPostAttachment, SocialPostLog
 
 class SocialAccountSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True, allow_null=True)
     platform_display = serializers.CharField(source='get_platform_display', read_only=True)
 
     class Meta:
@@ -10,6 +11,8 @@ class SocialAccountSerializer(serializers.ModelSerializer):
 
 
 class SocialPostLogSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True, allow_null=True)
+
     class Meta:
         model = SocialPostLog
         fields = '__all__'
@@ -29,6 +32,7 @@ class SocialPostAttachmentSerializer(serializers.ModelSerializer):
 
 
 class SocialPostSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True, allow_null=True)
     logs = SocialPostLogSerializer(many=True, read_only=True)
     attachments = SocialPostAttachmentSerializer(many=True, read_only=True)
     schedule_type_display = serializers.CharField(source='get_schedule_type_display', read_only=True)

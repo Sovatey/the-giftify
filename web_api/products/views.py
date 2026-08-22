@@ -3,21 +3,29 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from .models import Category, Product
 from .serializers import CategorySerializer, ProductSerializer
+from utils.tenant_mixin import TenantViewSetMixin
 
 
-class CategoryViewSet(viewsets.ModelViewSet):
+from django.db.models import Q, F
+
+
+class CategoryViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
     queryset = Category.objects.all().order_by('id')
     serializer_class = CategorySerializer
     permission_classes = [AllowAny]
 
 
-class ProductViewSet(viewsets.ModelViewSet):
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+
+
+class ProductViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('-id')
     serializer_class = ProductSerializer
     permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
-        queryset = Product.objects.all().order_by('-id')
+        queryset = super().get_queryset()
         category_id = self.request.query_params.get('category')
         search = self.request.query_params.get('search')
         low_stock = self.request.query_params.get('low_stock')
@@ -25,9 +33,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         if category_id:
             queryset = queryset.filter(category_id=category_id)
         if search:
-            queryset = queryset.filter(name__icontains=search) | queryset.filter(barcode__icontains=search)
+            queryset = queryset.filter(Q(name__icontains=search) | Q(barcode__icontains=search))
         if low_stock == 'true':
-            queryset = queryset.filter(stock_qty__lte=Product.objects.values('min_stock_alert'))
+            queryset = queryset.filter(stock_qty__lte=F('min_stock_alert'))
 
         return queryset
 

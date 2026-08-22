@@ -4,12 +4,13 @@ from .models import Category, Product
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'icon', 'created_at')
+    list_display = ('id', 'name', 'company', 'icon', 'created_at')
     search_fields = ('name',)
+    list_filter = ('company',)
 
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'barcode', 'category', 'price', 'cost', 'stock_qty', 'is_active')
-    search_fields = ('name', 'barcode')
-    list_filter = ('category', 'is_active')
+    list_display = ('id', 'name', 'barcode', 'company', 'category', 'uom', 'color', 'size', 'price', 'cost', 'stock_qty', 'is_active')
+    search_fields = ('name', 'barcode', 'color', 'size')
+    list_filter = ('company', 'category', 'uom', 'is_active')

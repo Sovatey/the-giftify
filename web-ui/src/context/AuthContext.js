@@ -32,6 +32,12 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('role', userRole);
       localStorage.setItem('permissions', JSON.stringify(userPerms));
 
+      if (userData?.company) {
+        localStorage.setItem('selectedCompanyId', String(userData.company));
+      } else {
+        localStorage.removeItem('selectedCompanyId');
+      }
+
       return { success: true, role: userRole };
     } catch (err) {
       const msg = err.response?.data?.error || 'Login failed';

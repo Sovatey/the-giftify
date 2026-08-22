@@ -1,29 +1,42 @@
 import React, { useState, useEffect } from "react";
-import { Layout, Row, Col, Card, Statistic, Table, Tag, List, Avatar, Spin, message } from 'antd';
+import { Layout, Row, Col, Card, Statistic, Table, Tag, List, Avatar, Spin, message, Select, Space } from 'antd';
 import Sidebar from '../../sidebar';
 import {
     DollarOutlined, ShoppingCartOutlined, AlertOutlined, TrophyOutlined,
     LineChartOutlined, HeartOutlined
 } from "@ant-design/icons";
 import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 
 const { Content } = Layout;
 
 const DashboardScreen = () => {
+    const { user, role } = useAuth();
     const [metrics, setMetrics] = useState(null);
     const [recentOrders, setRecentOrders] = useState([]);
+    const [companies, setCompanies] = useState([]);
+    const [selectedCompanyFilter, setSelectedCompanyFilter] = useState(null);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
+        if (user?.is_superuser || role === 'Admin') {
+            api.get('/user/companies/').then(res => {
+                setCompanies(res.data.results || res.data || []);
+            }).catch(() => {});
+        }
+    }, [user, role]);
+
+    useEffect(() => {
         fetchDashboardData();
-    }, []);
+    }, [selectedCompanyFilter]);
 
     const fetchDashboardData = async () => {
         setLoading(true);
         try {
+            const params = selectedCompanyFilter ? { company_id: selectedCompanyFilter } : {};
             const [metricRes, orderRes] = await Promise.all([
-                api.get('/sales/dashboard-metrics/'),
-                api.get('/sales/orders/')
+                api.get('/sales/dashboard-metrics/', { params }),
+                api.get('/sales/orders/', { params })
             ]);
             setMetrics(metricRes.data);
             setRecentOrders((orderRes.data.results || orderRes.data || []).slice(0, 7));
@@ -40,6 +53,16 @@ const DashboardScreen = () => {
             dataIndex: 'invoice_no',
             key: 'invoice_no',
             render: (code) => <Tag color="pink">{code}</Tag>
+        },
+        {
+            title: 'Store Company',
+            dataIndex: 'company_name',
+            key: 'company_name',
+            render: (cName) => (
+                <Tag color="blue" style={{ borderRadius: '10px', fontWeight: 700 }}>
+                    🏬 {cName || 'The Giftify'}
+                </Tag>
+            )
         },
         {
             title: 'Cashier',
@@ -76,11 +99,25 @@ const DashboardScreen = () => {
             <Sidebar />
             <Layout style={{ background: 'transparent' }}>
                 <Content style={{ padding: 24, margin: 0 }}>
-                    <div style={{ marginBottom: '20px' }}>
-                        <h2 style={{ margin: 0, color: '#4a2e35', fontWeight: 800 }}>
-                            Sales Analytics & Dashboard <HeartOutlined style={{ color: '#ff758c' }} />
-                        </h2>
-                        <span style={{ color: '#8c6a74', fontSize: '13px' }}>Real-time revenue metrics and top performing gifts</span>
+                    <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <h2 style={{ margin: 0, color: '#4a2e35', fontWeight: 800 }}>
+                                Sales Analytics & Dashboard <HeartOutlined style={{ color: '#ff758c' }} />
+                            </h2>
+                            <span style={{ color: '#8c6a74', fontSize: '13px' }}>Real-time revenue metrics and top performing gifts</span>
+                        </div>
+                        {(user?.is_superuser || role === 'Admin') && (
+                            <Select
+                                placeholder="Filter by Store Company"
+                                allowClear
+                                onChange={(val) => setSelectedCompanyFilter(val)}
+                                style={{ width: 220, borderRadius: '10px' }}
+                            >
+                                {companies.map(c => (
+                                    <Select.Option key={c.id} value={c.id}>🏬 {c.name}</Select.Option>
+                                ))}
+                            </Select>
+                        )}
                     </div>
 
                     {loading ? (

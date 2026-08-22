@@ -113,9 +113,15 @@ const LoginScreen = () => {
               loading={loading}
               className="btn-girly"
               style={{
-                height: "46px",
+                height: "48px",
                 fontSize: "16px",
+                fontWeight: 800,
                 letterSpacing: "0.5px",
+                background: "linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)",
+                borderColor: "#ff758c",
+                color: "#ffffff",
+                borderRadius: "24px",
+                boxShadow: "0 8px 20px rgba(255, 117, 140, 0.45)"
               }}
             >
               Sign In to POS

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Layout, Row, Col, Card, Input, Button, Tag, Badge, Divider,
-  Modal, Radio, InputNumber, message, Empty, Spin, Tooltip, Image, ConfigProvider
+  Modal, Radio, InputNumber, message, Empty, Spin, Tooltip, Image, ConfigProvider, Select
 } from 'antd';
 import {
   SearchOutlined, ShoppingCartOutlined, DeleteOutlined,
@@ -12,11 +12,13 @@ import {
 import Sidebar from '../sidebar';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { renderCategoryIcon } from '../../utils/categoryIcon';
+import { getImageUrl } from '../../utils/imageUrl';
 
 const { Content } = Layout;
 
 const POSScreen = () => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -36,10 +38,18 @@ const POSScreen = () => {
   const [selectedProductDetail, setSelectedProductDetail] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [detailQty, setDetailQty] = useState(1);
+  const [selectedColorModal, setSelectedColorModal] = useState('');
+  const [companies, setCompanies] = useState([]);
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState(null);
 
   useEffect(() => {
     fetchInitialData();
-  }, []);
+    if (user?.is_superuser || role === 'Admin') {
+      api.get('/user/companies/').then(res => {
+        setCompanies(res.data.results || res.data || []);
+      }).catch(() => {});
+    }
+  }, [user, role]);
 
   const fetchInitialData = async () => {
     setLoading(true);
@@ -48,65 +58,84 @@ const POSScreen = () => {
         api.get('/products/'),
         api.get('/products/categories/')
       ]);
-      setProducts(prodRes.data.results || prodRes.data || []);
-      setCategories(catRes.data.results || catRes.data || []);
+
+      const loadedProducts = prodRes.data.results || prodRes.data || [];
+      const loadedCategories = catRes.data.results || catRes.data || [];
+
+      setProducts(loadedProducts);
+      setCategories(loadedCategories);
     } catch (err) {
+      console.error(err);
       message.error('Failed to load products');
     } finally {
       setLoading(false);
     }
   };
 
-  // Filter products by search and category
-  const filteredProducts = products.filter(p => {
-    const matchesCat = selectedCategory === 'ALL' || p.category === selectedCategory || p.category_name === selectedCategory;
-    const matchesSearch = !searchText ||
-      p.name.toLowerCase().includes(searchText.toLowerCase()) ||
-      (p.barcode && p.barcode.toLowerCase().includes(searchText.toLowerCase()));
-    return matchesCat && matchesSearch;
+  // Filter products by search, category, and store company
+  const filteredProducts = products.filter(product => {
+    const matchesCat = selectedCategory === 'ALL' ||
+      product.category_name === selectedCategory ||
+      product.category === selectedCategory;
+    const matchesSearch = searchText === '' ||
+      product.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      (product.barcode && product.barcode.toLowerCase().includes(searchText.toLowerCase()));
+    const matchesCompany = !selectedCompanyFilter ||
+      product.company === selectedCompanyFilter ||
+      product.company_name === selectedCompanyFilter;
+    return matchesCat && matchesSearch && matchesCompany;
   });
 
   // Open item detail modal
   const handleViewDetail = (product) => {
     setSelectedProductDetail(product);
     setDetailQty(1);
+    const colors = product.color ? product.color.split(/[,/]/).map(c => c.trim()).filter(Boolean) : [];
+    setSelectedColorModal(colors.length > 0 ? colors[0] : '');
     setIsDetailModalOpen(true);
   };
 
   // Cart operations
-  const addToCart = (product, addQty = 1) => {
+  const addToCart = (product, addQty = 1, chosenColor = null) => {
     if (product.stock_qty <= 0) {
       message.warning(`${product.name} is currently out of stock!`);
       return;
     }
 
+    const colors = product.color ? product.color.split(/[,/]/).map(c => c.trim()).filter(Boolean) : [];
+    const colorToUse = chosenColor || (colors.length > 0 ? colors[0] : '');
+    const cartKey = `${product.id}_${colorToUse || 'default'}`;
+
     setCart(prev => {
-      const existing = prev.find(item => item.product_id === product.id);
+      const existing = prev.find(item => item.cartKey === cartKey);
       if (existing) {
         if (existing.qty + addQty > product.stock_qty) {
           message.warning(`Max stock reached for ${product.name} (Available: ${product.stock_qty})`);
           return prev;
         }
         return prev.map(item =>
-          item.product_id === product.id ? { ...item, qty: item.qty + addQty } : item
+          item.cartKey === cartKey ? { ...item, qty: item.qty + addQty } : item
         );
       }
       return [...prev, {
+        cartKey,
         product_id: product.id,
         name: product.name,
+        selected_color: colorToUse,
         price: parseFloat(product.price),
         maxStock: product.stock_qty,
         qty: addQty,
-        image_url: product.image_url
+        image_url: product.display_image_url || product.image_url
       }];
     });
-    message.success(`Added ${product.name} to cart!`);
+    message.success(`Added ${product.name} ${colorToUse ? `(${colorToUse})` : ''} to cart!`);
   };
 
-  const updateCartQty = (productId, delta) => {
+  const updateCartQty = (key, delta) => {
     setCart(prev => {
       return prev.map(item => {
-        if (item.product_id === productId) {
+        const itemKey = String(item.cartKey || item.product_id);
+        if (itemKey === String(key)) {
           const newQty = item.qty + delta;
           if (newQty <= 0) return null;
           if (newQty > item.maxStock) {
@@ -120,8 +149,10 @@ const POSScreen = () => {
     });
   };
 
-  const removeFromCart = (productId) => {
-    setCart(prev => prev.filter(item => item.product_id !== productId));
+  const removeFromCart = (key) => {
+    const targetKey = String(key);
+    setCart(prev => prev.filter(item => String(item.cartKey || item.product_id) !== targetKey));
+    message.info('Item removed from cart');
   };
 
   // Calculations
@@ -144,7 +175,11 @@ const POSScreen = () => {
     try {
       const payload = {
         cashier_name: user?.name || user?.username || 'Cashier',
-        items: cart,
+        items: cart.map(i => ({
+          product_id: i.product_id,
+          selected_color: i.selected_color,
+          qty: i.qty
+        })),
         discount_amount: discount,
         tax_amount: 0,
         payment_method: paymentMethod,
@@ -179,11 +214,11 @@ const POSScreen = () => {
         <Sidebar />
         <Layout style={{ background: 'transparent' }}>
           <Content style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-            
+
             <Row gutter={16} style={{ height: '100%' }}>
               {/* Left Column - Product Catalog */}
               <Col xs={24} lg={15} xl={16} style={{ display: 'flex', flexDirection: 'column', height: '100%', paddingRight: '12px' }}>
-                
+
                 {/* Header Search & Controls */}
                 <Card className="glass-card" style={{ marginBottom: '16px', padding: '12px' }}>
                   <Row align="middle" justify="space-between" gutter={[12, 12]}>
@@ -197,7 +232,19 @@ const POSScreen = () => {
                         style={{ borderRadius: '20px', fontSize: '15px' }}
                       />
                     </Col>
-                    <Col xs={24} sm={10} style={{ textAlign: 'right' }}>
+                    <Col xs={24} sm={10} style={{ textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      {(user?.is_superuser || role === 'Admin') && (
+                        <Select
+                          placeholder="Filter by Company"
+                          allowClear
+                          onChange={(val) => setSelectedCompanyFilter(val)}
+                          style={{ width: 170, borderRadius: '20px' }}
+                        >
+                          {companies.map(c => (
+                            <Select.Option key={c.id} value={c.id}>🏬 {c.name}</Select.Option>
+                          ))}
+                        </Select>
+                      )}
                       <Button
                         icon={<ReloadOutlined />}
                         onClick={fetchInitialData}
@@ -215,10 +262,11 @@ const POSScreen = () => {
                       onClick={() => setSelectedCategory('ALL')}
                       style={{
                         cursor: 'pointer', borderRadius: '16px', padding: '6px 16px',
-                        fontWeight: 700, fontSize: '13px', border: 'none'
+                        fontWeight: 700, fontSize: '13px', border: 'none',
+                        display: 'inline-flex', alignItems: 'center', gap: '6px'
                       }}
                     >
-                      All Gifts
+                      🎁 All Gifts
                     </Tag>
                     {categories.map(cat => (
                       <Tag
@@ -227,10 +275,11 @@ const POSScreen = () => {
                         onClick={() => setSelectedCategory(cat.name)}
                         style={{
                           cursor: 'pointer', borderRadius: '16px', padding: '6px 16px',
-                          fontWeight: 700, fontSize: '13px', border: 'none'
+                          fontWeight: 700, fontSize: '13px', border: 'none',
+                          display: 'inline-flex', alignItems: 'center', gap: '6px'
                         }}
                       >
-                        {cat.name}
+                        {renderCategoryIcon(cat.icon, 14)} {cat.name}
                       </Tag>
                     ))}
                   </div>
@@ -254,9 +303,22 @@ const POSScreen = () => {
                               <div style={{ height: '130px', overflow: 'hidden', borderRadius: '16px 16px 0 0', position: 'relative' }}>
                                 <img
                                   alt={product.name}
-                                  src={product.image_url || 'https://images.unsplash.com/photo-1559454403-b8fb88521f11?w=400'}
+                                  src={getImageUrl(product.display_image_url || product.image_url) || 'https://images.unsplash.com/photo-1559454403-b8fb88521f11?w=400'}
                                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                 />
+                                {product.category_name && (
+                                  <Tag
+                                    style={{
+                                      position: 'absolute', top: '8px', left: '8px',
+                                      borderRadius: '10px', fontWeight: 700, fontSize: '10px',
+                                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                      backdropFilter: 'blur(6px)', background: 'rgba(255, 255, 255, 0.9)',
+                                      color: '#4a2e35', border: '1px solid #ffccd5'
+                                    }}
+                                  >
+                                    {renderCategoryIcon(product.category_icon, 12)} {product.category_name}
+                                  </Tag>
+                                )}
                                 <Tag
                                   color={product.stock_qty > 5 ? 'success' : product.stock_qty > 0 ? 'warning' : 'error'}
                                   style={{ position: 'absolute', top: '8px', right: '8px', borderRadius: '10px', fontWeight: 700 }}
@@ -276,14 +338,24 @@ const POSScreen = () => {
                             }
                             bodyStyle={{ padding: '12px' }}
                           >
-                            <div style={{ fontWeight: 700, fontSize: '14px', color: '#4a2e35', height: '38px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontWeight: 700, fontSize: '14px', color: '#4a2e35', height: '22px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {product.name}
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                            <div style={{ display: 'flex', gap: '4px', margin: '4px 0', height: '22px', overflow: 'hidden' }}>
+                              {(user?.is_superuser || role === 'Admin') && product.company_name && (
+                                <Tag color="blue" style={{ fontSize: '10px', borderRadius: '8px', padding: '0 4px', margin: 0 }}>
+                                  🏬 {product.company_name}
+                                </Tag>
+                              )}
+                              {product.color && <Tag color="magenta" style={{ fontSize: '10px', borderRadius: '8px', padding: '0 4px', margin: 0 }}>🎨 {product.color}</Tag>}
+                              {product.size && <Tag color="orange" style={{ fontSize: '10px', borderRadius: '8px', padding: '0 4px', margin: 0 }}>📐 {product.size}</Tag>}
+                              {product.uom && product.uom !== 'Pcs' && <Tag color="cyan" style={{ fontSize: '10px', borderRadius: '8px', padding: '0 4px', margin: 0 }}>{product.uom}</Tag>}
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                               <span style={{ fontSize: '16px', fontWeight: 800, color: '#ff758c' }}>
-                                ${parseFloat(product.price).toFixed(2)}
+                                ${parseFloat(product.price).toFixed(2)} <span style={{ fontSize: '11px', color: '#8c6a74', fontWeight: 500 }}>/ {product.uom || 'Pcs'}</span>
                               </span>
-                              
+
                               {/* ONLY clicking this + button adds directly to cart */}
                               <Tooltip title="Add to cart">
                                 <Button
@@ -315,7 +387,7 @@ const POSScreen = () => {
               {/* Right Column - POS Cart & Payment Sidebar */}
               <Col xs={24} lg={9} xl={8} style={{ height: '100%' }}>
                 <Card className="glass-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '12px' }}>
-                  
+
                   {/* Cart Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <span style={{ fontSize: '18px', fontWeight: 800, color: '#4a2e35' }}>
@@ -334,33 +406,43 @@ const POSScreen = () => {
                         <div>Your cart is empty</div>
                       </div>
                     ) : (
-                      cart.map(item => (
-                        <div
-                          key={item.product_id}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: '10px', padding: '8px',
-                            background: 'rgba(255, 240, 243, 0.6)', borderRadius: '12px', marginBottom: '8px'
-                          }}
-                        >
-                          <img
-                            src={item.image_url || 'https://images.unsplash.com/photo-1559454403-b8fb88521f11?w=400'}
-                            alt={item.name}
-                            style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover' }}
-                          />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, fontSize: '13px', color: '#4a2e35' }}>{item.name}</div>
-                            <div style={{ fontSize: '12px', color: '#ff758c', fontWeight: 700 }}>
-                              ${item.price.toFixed(2)} x {item.qty} = ${(item.price * item.qty).toFixed(2)}
+                      cart.map(item => {
+                        const itemKey = item.cartKey || item.product_id;
+                        return (
+                          <div
+                            key={itemKey}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '10px', padding: '8px',
+                              background: 'rgba(255, 240, 243, 0.6)', borderRadius: '12px', marginBottom: '8px'
+                            }}
+                          >
+                            <img
+                              src={getImageUrl(item.image_url) || 'https://images.unsplash.com/photo-1559454403-b8fb88521f11?w=400'}
+                              alt={item.name}
+                              style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover' }}
+                            />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: '13px', color: '#4a2e35', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                                {item.name}
+                                {item.selected_color && (
+                                  <Tag color="magenta" style={{ borderRadius: 6, fontSize: 10, padding: '0 4px', margin: 0 }}>
+                                    🎨 {item.selected_color}
+                                  </Tag>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#ff758c', fontWeight: 700 }}>
+                                ${item.price.toFixed(2)} x {item.qty} = ${(item.price * item.qty).toFixed(2)}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Button size="small" shape="circle" icon={<MinusOutlined />} onClick={() => updateCartQty(itemKey, -1)} />
+                              <span style={{ fontWeight: 700, minWidth: '18px', textAlign: 'center' }}>{item.qty}</span>
+                              <Button size="small" shape="circle" icon={<PlusOutlined />} onClick={() => updateCartQty(itemKey, 1)} />
+                              <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => removeFromCart(itemKey)} />
                             </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Button size="small" shape="circle" icon={<MinusOutlined />} onClick={() => updateCartQty(item.product_id, -1)} />
-                            <span style={{ fontWeight: 700, minWidth: '18px', textAlign: 'center' }}>{item.qty}</span>
-                            <Button size="small" shape="circle" icon={<PlusOutlined />} onClick={() => updateCartQty(item.product_id, 1)} />
-                            <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => removeFromCart(item.product_id)} />
-                          </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
 
@@ -446,158 +528,182 @@ const POSScreen = () => {
               </Col>
             </Row>
 
-          {/* ITEM DETAIL MODAL */}
-          <Modal
-            open={isDetailModalOpen}
-            onCancel={() => setIsDetailModalOpen(false)}
-            footer={null}
-            width={650}
-            style={{ borderRadius: '24px', overflow: 'hidden' }}
-          >
-            {selectedProductDetail && (
-              <Row gutter={[20, 20]} style={{ padding: '8px' }}>
-                <Col xs={24} md={10}>
-                  <div style={{ borderRadius: '16px', overflow: 'hidden', height: '230px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
-                    <Image
-                      src={selectedProductDetail.image_url || 'https://images.unsplash.com/photo-1559454403-b8fb88521f11?w=400'}
-                      alt={selectedProductDetail.name}
-                      style={{ width: '100%', height: '230px', objectFit: 'cover' }}
-                    />
-                  </div>
-                </Col>
-
-                <Col xs={24} md={14} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                  <div>
-                    <Tag color="purple" style={{ borderRadius: '12px', fontWeight: 700, marginBottom: '6px' }}>
-                      {selectedProductDetail.category_name || 'General Gift'}
-                    </Tag>
-                    <Tag color="pink" style={{ borderRadius: '12px', fontWeight: 700, marginBottom: '6px' }}>
-                      SKU: {selectedProductDetail.barcode || 'N/A'}
-                    </Tag>
-
-                    <h2 style={{ color: '#4a2e35', fontWeight: 800, margin: '4px 0 8px 0', fontSize: '20px' }}>
-                      {selectedProductDetail.name}
-                    </h2>
-
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '24px', fontWeight: 800, color: '#ff758c' }}>
-                        ${parseFloat(selectedProductDetail.price).toFixed(2)}
-                      </span>
-                      {selectedProductDetail.cost && (
-                        <span style={{ fontSize: '13px', color: '#8c6a74', textDecoration: 'line-through' }}>
-                          Cost: ${parseFloat(selectedProductDetail.cost).toFixed(2)}
-                        </span>
-                      )}
+            {/* ITEM DETAIL MODAL */}
+            <Modal
+              open={isDetailModalOpen}
+              onCancel={() => setIsDetailModalOpen(false)}
+              footer={null}
+              width={650}
+              style={{ borderRadius: '24px', overflow: 'hidden' }}
+            >
+              {selectedProductDetail && (
+                <Row gutter={[20, 20]} style={{ padding: '8px' }}>
+                  <Col xs={24} md={10}>
+                    <div style={{ borderRadius: '16px', overflow: 'hidden', height: '230px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+                      <Image
+                        src={getImageUrl(selectedProductDetail.display_image_url || selectedProductDetail.image_url) || 'https://images.unsplash.com/photo-1559454403-b8fb88521f11?w=400'}
+                        alt={selectedProductDetail.name}
+                        style={{ width: '100%', height: '230px', objectFit: 'cover' }}
+                      />
                     </div>
+                  </Col>
 
-                    <div style={{ marginBottom: '12px' }}>
-                      <Tag
-                        color={selectedProductDetail.stock_qty > 5 ? 'success' : selectedProductDetail.stock_qty > 0 ? 'warning' : 'error'}
-                        style={{ borderRadius: '12px', padding: '4px 12px', fontWeight: 700, fontSize: '13px' }}
-                      >
-                        {selectedProductDetail.stock_qty > 0
-                          ? `Available Stock: ${selectedProductDetail.stock_qty} units`
-                          : 'Out of Stock'}
+                  <Col xs={24} md={14} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div>
+                      <Tag color="purple" style={{ borderRadius: '12px', fontWeight: 700, marginBottom: '6px' }}>
+                        {selectedProductDetail.category_name || 'General Gift'}
                       </Tag>
-                    </div>
+                      <Tag color="pink" style={{ borderRadius: '12px', fontWeight: 700, marginBottom: '6px' }}>
+                        SKU: {selectedProductDetail.barcode || 'N/A'}
+                      </Tag>
 
-                    <p style={{ color: '#555', fontSize: '13px', lineHeight: '1.5', background: 'rgba(255,240,243,0.6)', padding: '10px', borderRadius: '12px' }}>
+                      <h2 style={{ color: '#4a2e35', fontWeight: 800, margin: '4px 0 8px 0', fontSize: '20px' }}>
+                        {selectedProductDetail.name}
+                      </h2>
+
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '12px' }}>
+                        <span style={{ fontSize: '24px', fontWeight: 800, color: '#ff758c' }}>
+                          ${parseFloat(selectedProductDetail.price).toFixed(2)}
+                        </span>
+                        {/* {selectedProductDetail.cost && (
+                          <span style={{ fontSize: '13px', color: '#8c6a74', textDecoration: 'line-through' }}>
+                            Cost: ${parseFloat(selectedProductDetail.cost).toFixed(2)}
+                          </span>
+                        )} */}
+                      </div>
+
+                      <div style={{ marginBottom: '12px' }}>
+                        <Tag
+                          color={selectedProductDetail.stock_qty > 5 ? 'success' : selectedProductDetail.stock_qty > 0 ? 'warning' : 'error'}
+                          style={{ borderRadius: '12px', padding: '4px 12px', fontWeight: 700, fontSize: '13px' }}
+                        >
+                          {selectedProductDetail.stock_qty > 0
+                            ? `Available Stock: ${selectedProductDetail.stock_qty} units`
+                            : 'Out of Stock'}
+                        </Tag>
+                      </div>
+
+                      {/* Color Variant Selector Dropdown */}
+                      {(() => {
+                        const colors = selectedProductDetail.color ? selectedProductDetail.color.split(/[,/]/).map(c => c.trim()).filter(Boolean) : [];
+                        if (colors.length === 0) return null;
+                        return (
+                          <div style={{ marginBottom: '12px' }}>
+                            <label style={{ fontSize: '11px', fontWeight: 700, color: '#8c6a74', display: 'block', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                              CHOOSE COLOR VARIANT
+                            </label>
+                            <Select
+                              value={selectedColorModal}
+                              onChange={(val) => setSelectedColorModal(val)}
+                              style={{ width: '100%', borderRadius: '10px' }}
+                            >
+                              {colors.map(c => (
+                                <Select.Option key={c} value={c}>
+                                  🎨 {c}
+                                </Select.Option>
+                              ))}
+                            </Select>
+                          </div>
+                        );
+                      })()}
+
+                      {/* <p style={{ color: '#555', fontSize: '13px', lineHeight: '1.5', background: 'rgba(255,240,243,0.6)', padding: '10px', borderRadius: '12px' }}>
                       <InfoCircleOutlined style={{ color: '#ff758c', marginRight: '6px' }} />
                       {selectedProductDetail.description || 'Premium gift item crafted for Special occasions with high quality standards.'}
-                    </p>
-                  </div>
+                    </p> */}
+                    </div>
 
-                  {/* Quantity & Add to Cart inside Detail Modal */}
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px' }}>
-                    <InputNumber
-                      min={1}
-                      max={selectedProductDetail.stock_qty || 1}
-                      value={detailQty}
-                      onChange={(v) => setDetailQty(v || 1)}
-                      style={{ width: '80px', borderRadius: '12px' }}
-                    />
-                    <Button
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      disabled={selectedProductDetail.stock_qty <= 0}
-                      onClick={() => {
-                        addToCart(selectedProductDetail, detailQty);
-                        setIsDetailModalOpen(false);
-                      }}
-                      className="btn-girly"
-                      style={{ flex: 1, height: '40px', fontSize: '15px' }}
-                    >
-                      Add to Cart (${(parseFloat(selectedProductDetail.price) * detailQty).toFixed(2)})
-                    </Button>
-                  </div>
-                </Col>
-              </Row>
-            )}
-          </Modal>
+                    {/* Quantity & Add to Cart inside Detail Modal */}
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px' }}>
+                      <InputNumber
+                        min={1}
+                        max={selectedProductDetail.stock_qty || 1}
+                        value={detailQty}
+                        onChange={(v) => setDetailQty(v || 1)}
+                        style={{ width: '80px', borderRadius: '12px' }}
+                      />
+                      <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        disabled={selectedProductDetail.stock_qty <= 0}
+                        onClick={() => {
+                          addToCart(selectedProductDetail, detailQty, selectedColorModal);
+                          setIsDetailModalOpen(false);
+                        }}
+                        className="btn-girly"
+                        style={{ flex: 1, height: '40px', fontSize: '15px' }}
+                      >
+                        Add to Cart (${(parseFloat(selectedProductDetail.price) * detailQty).toFixed(2)})
+                      </Button>
+                    </div>
+                  </Col>
+                </Row>
+              )}
+            </Modal>
 
-          {/* Printable Receipt Modal */}
-          <Modal
-            open={isReceiptModalOpen}
-            onCancel={() => setIsReceiptModalOpen(false)}
-            footer={[
-              <Button key="close" onClick={() => setIsReceiptModalOpen(false)}>Close</Button>,
-              <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={() => window.print()} className="btn-girly">
-                Print Receipt
-              </Button>
-            ]}
-          >
-            {lastReceipt && (
-              <div id="printable-receipt" style={{ padding: '16px', fontFamily: 'monospace', textAlign: 'center' }}>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>The Giftify POS</div>
-                <div style={{ fontSize: '12px', color: '#666' }}>Cute Gifts & Accessories</div>
-                <div style={{ fontSize: '12px', color: '#666' }}>Phnom Penh, Cambodia</div>
-                <Divider style={{ margin: '8px 0' }} />
-                <div style={{ textAlign: 'left', fontSize: '12px' }}>
-                  <div><strong>Invoice:</strong> {lastReceipt.invoice_no}</div>
-                  <div><strong>Cashier:</strong> {lastReceipt.cashier_name}</div>
-                  <div><strong>Date:</strong> {new Date(lastReceipt.created_at).toLocaleString()}</div>
-                </div>
-                <Divider style={{ margin: '8px 0' }} />
-                <table style={{ width: '100%', fontSize: '12px', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #ccc' }}>
-                      <th>Item</th>
-                      <th>Qty</th>
-                      <th>Price</th>
-                      <th>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lastReceipt.items?.map(it => (
-                      <tr key={it.id}>
-                        <td>{it.product_name}</td>
-                        <td>{it.qty}</td>
-                        <td>${parseFloat(it.unit_price).toFixed(2)}</td>
-                        <td>${parseFloat(it.subtotal).toFixed(2)}</td>
+            {/* Printable Receipt Modal */}
+            <Modal
+              open={isReceiptModalOpen}
+              onCancel={() => setIsReceiptModalOpen(false)}
+              footer={[
+                <Button key="close" onClick={() => setIsReceiptModalOpen(false)}>Close</Button>,
+                <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={() => window.print()} className="btn-girly">
+                  Print Receipt
+                </Button>
+              ]}
+            >
+              {lastReceipt && (
+                <div id="printable-receipt" style={{ padding: '16px', fontFamily: 'monospace', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold' }}>The Giftify POS</div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>Cute Gifts & Accessories</div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>Phnom Penh, Cambodia</div>
+                  <Divider style={{ margin: '8px 0' }} />
+                  <div style={{ textAlign: 'left', fontSize: '12px' }}>
+                    <div><strong>Invoice:</strong> {lastReceipt.invoice_no}</div>
+                    <div><strong>Cashier:</strong> {lastReceipt.cashier_name}</div>
+                    <div><strong>Date:</strong> {new Date(lastReceipt.created_at).toLocaleString()}</div>
+                  </div>
+                  <Divider style={{ margin: '8px 0' }} />
+                  <table style={{ width: '100%', fontSize: '12px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #ccc' }}>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Total</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <Divider style={{ margin: '8px 0' }} />
-                <div style={{ textAlign: 'right', fontSize: '12px' }}>
-                  <div>Subtotal: ${parseFloat(lastReceipt.subtotal).toFixed(2)}</div>
-                  <div>Discount: -${parseFloat(lastReceipt.discount_amount).toFixed(2)}</div>
-                  <div style={{ fontSize: '15px', fontWeight: 'bold', marginTop: '4px' }}>
-                    Grand Total: ${parseFloat(lastReceipt.grand_total).toFixed(2)}
+                    </thead>
+                    <tbody>
+                      {lastReceipt.items?.map(it => (
+                        <tr key={it.id}>
+                          <td>{it.product_name}</td>
+                          <td>{it.qty}</td>
+                          <td>${parseFloat(it.unit_price).toFixed(2)}</td>
+                          <td>${parseFloat(it.subtotal).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <Divider style={{ margin: '8px 0' }} />
+                  <div style={{ textAlign: 'right', fontSize: '12px' }}>
+                    <div>Subtotal: ${parseFloat(lastReceipt.subtotal).toFixed(2)}</div>
+                    <div>Discount: -${parseFloat(lastReceipt.discount_amount).toFixed(2)}</div>
+                    <div style={{ fontSize: '15px', fontWeight: 'bold', marginTop: '4px' }}>
+                      Grand Total: ${parseFloat(lastReceipt.grand_total).toFixed(2)}
+                    </div>
+                    <div>Payment Method: {lastReceipt.payment_method}</div>
+                    <div>Paid: ${parseFloat(lastReceipt.amount_received).toFixed(2)}</div>
+                    <div>Change: ${parseFloat(lastReceipt.change_given).toFixed(2)}</div>
                   </div>
-                  <div>Payment Method: {lastReceipt.payment_method}</div>
-                  <div>Paid: ${parseFloat(lastReceipt.amount_received).toFixed(2)}</div>
-                  <div>Change: ${parseFloat(lastReceipt.change_given).toFixed(2)}</div>
+                  <Divider style={{ margin: '8px 0' }} />
+                  <div style={{ fontSize: '12px', fontStyle: 'italic' }}>Thank you for shopping at The Giftify! <HeartOutlined /></div>
                 </div>
-                <Divider style={{ margin: '8px 0' }} />
-                <div style={{ fontSize: '12px', fontStyle: 'italic' }}>Thank you for shopping at The Giftify! <HeartOutlined /></div>
-              </div>
-            )}
-          </Modal>
+              )}
+            </Modal>
 
-        </Content>
+          </Content>
+        </Layout>
       </Layout>
-    </Layout>
     </ConfigProvider>
   );
 };

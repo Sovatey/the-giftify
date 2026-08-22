@@ -10,7 +10,10 @@ from products.models import Product
 from inventory.models import StockMovement
 
 
-class SaleOrderViewSet(viewsets.ModelViewSet):
+from utils.tenant_mixin import TenantViewSetMixin
+
+
+class SaleOrderViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
     queryset = SaleOrder.objects.all().order_by('-created_at')
     serializer_class = SaleOrderSerializer
     permission_classes = [AllowAny]
@@ -31,6 +34,8 @@ class POSCheckoutView(views.APIView):
 
         if not items_data:
             return Response({'error': 'Cart items are required for checkout'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_company = request.user.company if request.user.is_authenticated and hasattr(request.user, 'company') else None
 
         with transaction.atomic():
             cashier_name = data.get('cashier_name', request.user.username if request.user.is_authenticated else 'Cashier')
@@ -55,9 +60,11 @@ class POSCheckoutView(views.APIView):
                 item_subtotal = unit_price * qty
                 calc_subtotal += item_subtotal
 
+                selected_color = item.get('selected_color') or item.get('color')
                 order_items_to_create.append({
                     'product': product,
                     'product_name': product.name,
+                    'selected_color': selected_color,
                     'qty': qty,
                     'unit_price': unit_price,
                     'subtotal': item_subtotal
@@ -67,6 +74,7 @@ class POSCheckoutView(views.APIView):
             change_given = max(0.0, amount_received - grand_total) if payment_method == 'CASH' else 0.0
 
             sale_order = SaleOrder.objects.create(
+                company=user_company or (order_items_to_create[0]['product'].company if order_items_to_create else None),
                 cashier_name=cashier_name,
                 subtotal=calc_subtotal,
                 discount_amount=discount_amount,
@@ -86,6 +94,7 @@ class POSCheckoutView(views.APIView):
                     sale_order=sale_order,
                     product=prod,
                     product_name=item_info['product_name'],
+                    selected_color=item_info.get('selected_color'),
                     qty=qty,
                     unit_price=item_info['unit_price'],
                     subtotal=item_info['subtotal']
@@ -96,6 +105,7 @@ class POSCheckoutView(views.APIView):
                 prod.save()
 
                 StockMovement.objects.create(
+                    company=sale_order.company,
                     product=prod,
                     movement_type='SALE',
                     qty=qty,
@@ -114,22 +124,34 @@ class SalesDashboardView(views.APIView):
     def get(self, request):
         """Returns analytics summary for dashboard"""
         today = timezone.now().date()
-        today_sales = SaleOrder.objects.filter(created_at__date=today, status='COMPLETED')
+
+        user = request.user
+        company_id = request.query_params.get('company_id') or request.headers.get('X-Company-ID')
+
+        sales_qs = SaleOrder.objects.filter(status='COMPLETED')
+        products_qs = Product.objects.filter(is_active=True)
+
+        if user.is_authenticated and not user.is_superuser and getattr(user, 'company', None):
+            sales_qs = sales_qs.filter(company=user.company)
+            products_qs = products_qs.filter(company=user.company)
+        elif company_id:
+            sales_qs = sales_qs.filter(company_id=company_id)
+            products_qs = products_qs.filter(company_id=company_id)
+
+        today_sales = sales_qs.filter(created_at__date=today)
 
         total_revenue_today = today_sales.aggregate(total=Sum('grand_total'))['total'] or 0
         total_orders_today = today_sales.count()
 
-        all_time_revenue = SaleOrder.objects.filter(status='COMPLETED').aggregate(total=Sum('grand_total'))['total'] or 0
-        all_time_orders = SaleOrder.objects.filter(status='COMPLETED').count()
+        all_time_revenue = sales_qs.aggregate(total=Sum('grand_total'))['total'] or 0
+        all_time_orders = sales_qs.count()
 
-        # Top sold products
-        top_items = SaleOrderItem.objects.values('product_name').annotate(
+        top_items = SaleOrderItem.objects.filter(sale_order__in=sales_qs).values('product_name').annotate(
             total_qty=Sum('qty'),
             total_sales=Sum('subtotal')
         ).order_by('-total_qty')[:5]
 
-        # Low stock count
-        low_stock_count = Product.objects.filter(is_active=True, stock_qty__lte=F('min_stock_alert')).count()
+        low_stock_count = products_qs.filter(stock_qty__lte=F('min_stock_alert')).count()
 
         return Response({
             'today_revenue': float(total_revenue_today),

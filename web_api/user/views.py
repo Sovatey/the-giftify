@@ -3,8 +3,8 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import authenticate
-from .models import User, UserGroup, UserRoutes, UserPermission
-from .serializers import UserSerializer, UserGroupSerializer, UserRoutesSerializer, UserPermissionSerializer
+from .models import User, UserGroup, UserRoutes, UserPermission, Company
+from .serializers import UserSerializer, UserGroupSerializer, UserRoutesSerializer, UserPermissionSerializer, CompanySerializer
 
 
 class LoginView(views.APIView):
@@ -63,6 +63,12 @@ class ProfileView(views.APIView):
         })
 
 
+class CompanyViewSet(viewsets.ModelViewSet):
+    queryset = Company.objects.all().order_by('-created_at')
+    serializer_class = CompanySerializer
+    permission_classes = [AllowAny]
+
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-id')
     serializer_class = UserSerializer
@@ -96,6 +102,7 @@ class SeedRBACView(views.APIView):
             {'path': '/pos', 'name': 'POS Checkout'},
             {'path': '/inventory', 'name': 'Inventory & Stock'},
             {'path': '/dashboard', 'name': 'Sales Analytics'},
+            {'path': '/social-publisher', 'name': 'Social Auto-Post'},
             {'path': '/user', 'name': 'User & Role Management'},
         ]
 
@@ -109,7 +116,7 @@ class SeedRBACView(views.APIView):
 
         default_groups = [
             {'name': 'Admin', 'description': 'Full System Access'},
-            {'name': 'Manager', 'description': 'Inventory & Sales Management'},
+            {'name': 'Manager', 'description': 'Company Inventory, Sales & Social Publisher Management'},
             {'name': 'Cashier', 'description': 'POS Sales & Checkout Only'},
         ]
 
@@ -126,12 +133,12 @@ class SeedRBACView(views.APIView):
                 defaults={'view': True, 'add': True, 'edit': True, 'delete': True}
             )
 
-        # Set Manager permissions (POS, Inventory, Dashboard)
-        for path in ['/pos', '/inventory', '/dashboard']:
+        # Set Manager permissions (POS, Inventory, Dashboard, Social Publisher)
+        for path in ['/pos', '/inventory', '/dashboard', '/social-publisher']:
             UserPermission.objects.update_or_create(
                 group=group_objs['Manager'],
                 route=route_objs[path],
-                defaults={'view': True, 'add': True, 'edit': True, 'delete': False}
+                defaults={'view': True, 'add': True, 'edit': True, 'delete': True}
             )
 
         # Set Cashier permissions (POS Checkout view & add)

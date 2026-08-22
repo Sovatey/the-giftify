@@ -1,31 +1,67 @@
 import React, { useState, useEffect } from "react";
-import { Layout, Table, Button, Card, Tooltip, Tag, Space, Input, Select, Alert, message, Avatar } from 'antd';
+import { Layout, Table, Button, Card, Tooltip, Tag, Space, Input, Select, Alert, message, Avatar, Modal } from 'antd';
 import Sidebar from '../../sidebar';
-import { PlusOutlined, ReloadOutlined, SearchOutlined, EditOutlined, InboxOutlined } from "@ant-design/icons";
+import { PlusOutlined, ReloadOutlined, SearchOutlined, EditOutlined, InboxOutlined, CopyOutlined, HistoryOutlined } from "@ant-design/icons";
 import ModelForm from './modalform';
 import api from '../../../services/api';
+
+import { renderCategoryIcon } from '../../../utils/categoryIcon';
+import { getImageUrl } from '../../../utils/imageUrl';
+import { useAuth } from '../../../context/AuthContext';
+import dayjs from 'dayjs';
 
 const { Content } = Layout;
 
 const InventoryScreen = () => {
+    const { user, role } = useAuth();
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [companies, setCompanies] = useState([]);
     const [loading, setLoading] = useState(false);
     const [searchText, setSearchText] = useState('');
     const [selectedCategory, setSelectedCategory] = useState(null);
+    const [selectedCompanyFilter, setSelectedCompanyFilter] = useState(null);
     const [lowStockFilter, setLowStockFilter] = useState(false);
 
     // Modal state
     const [openModal, setOpenModal] = useState(false);
     const [modalTitle, setModalTitle] = useState("Add New Product");
     const [editingProduct, setEditingProduct] = useState(null);
+    const [duplicateValues, setDuplicateValues] = useState(null);
     const [isRestock, setIsRestock] = useState(false);
     const [submitLoading, setSubmitLoading] = useState(false);
+
+    // Stock Movement Audit History Modal state
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [stockMovements, setStockMovements] = useState([]);
+    const [movementsLoading, setMovementsLoading] = useState(false);
+
+    const fetchStockMovements = async () => {
+        setMovementsLoading(true);
+        try {
+            const res = await api.get('/inventory/stock-movements/');
+            setStockMovements(res.data.results || res.data || []);
+        } catch (err) {
+            message.error('Failed to load stock movements');
+        } finally {
+            setMovementsLoading(false);
+        }
+    };
+
+    const handleOpenHistoryModal = () => {
+        fetchStockMovements();
+        setIsHistoryModalOpen(true);
+    };
 
     useEffect(() => {
         fetchProducts();
         fetchCategories();
-    }, []);
+        if (user?.is_superuser || role === 'Admin') {
+            api.get('/user/companies/').then(res => {
+                setCompanies(res.data.results || res.data || []);
+            }).catch(() => {});
+        }
+    }, [user, role]);
 
     const fetchProducts = async () => {
         setLoading(true);
@@ -50,6 +86,7 @@ const InventoryScreen = () => {
 
     const handleOpenAddProduct = () => {
         setEditingProduct(null);
+        setDuplicateValues(null);
         setIsRestock(false);
         setModalTitle("Add New Gift Product");
         setOpenModal(true);
@@ -57,13 +94,28 @@ const InventoryScreen = () => {
 
     const handleOpenEditProduct = (product) => {
         setEditingProduct(product);
+        setDuplicateValues(null);
         setIsRestock(false);
         setModalTitle(`Edit Product - ${product.name}`);
         setOpenModal(true);
     };
 
+    const handleDuplicateProduct = (product) => {
+        setEditingProduct(null);
+        setDuplicateValues({
+            ...product,
+            id: undefined,
+            name: `${product.name} (Copy)`,
+            barcode: product.barcode ? `${product.barcode}-COPY` : '',
+        });
+        setIsRestock(false);
+        setModalTitle(`Duplicate Product - ${product.name}`);
+        setOpenModal(true);
+    };
+
     const handleOpenRestock = (product) => {
         setEditingProduct(product);
+        setDuplicateValues(null);
         setIsRestock(true);
         setModalTitle(`Stock Intake - ${product.name}`);
         setOpenModal(true);
@@ -88,18 +140,28 @@ const InventoryScreen = () => {
                     received_date: formValues.received_date,
                 });
                 message.success(`Restocked ${formValues.qty} units for ${editingProduct.name}`);
-            } else if (editingProduct) {
-                // Update product
-                await api.put(`/products/${editingProduct.id}/`, formValues);
-                message.success('Product updated successfully!');
             } else {
-                // Create product
-                await api.post('/products/', formValues);
-                message.success('New product added to inventory!');
+                const formData = new FormData();
+                Object.keys(formValues).forEach(key => {
+                    if (formValues[key] !== undefined && formValues[key] !== null) {
+                        formData.append(key, formValues[key]);
+                    }
+                });
+
+                const config = { headers: { 'Content-Type': 'multipart/form-data' } };
+
+                if (editingProduct) {
+                    await api.put(`/products/${editingProduct.id}/`, formData, config);
+                    message.success('Product updated successfully!');
+                } else {
+                    await api.post('/products/', formData, config);
+                    message.success('New product added to inventory!');
+                }
             }
             setOpenModal(false);
             fetchProducts();
         } catch (err) {
+            console.error(err);
             message.error(err.response?.data?.error || 'Operation failed');
         } finally {
             setSubmitLoading(false);
@@ -113,7 +175,8 @@ const InventoryScreen = () => {
             p.name.toLowerCase().includes(searchText.toLowerCase()) ||
             (p.barcode && p.barcode.toLowerCase().includes(searchText.toLowerCase()));
         const matchesLowStock = !lowStockFilter || p.stock_qty <= p.min_stock_alert;
-        return matchesCat && matchesSearch && matchesLowStock;
+        const matchesCompany = !selectedCompanyFilter || p.company === selectedCompanyFilter || p.company_name === selectedCompanyFilter;
+        return matchesCat && matchesSearch && matchesLowStock && matchesCompany;
     });
 
     const lowStockCount = products.filter(p => p.stock_qty <= p.min_stock_alert).length;
@@ -127,13 +190,13 @@ const InventoryScreen = () => {
         },
         {
             title: 'Image',
-            dataIndex: 'image_url',
+            dataIndex: 'display_image_url',
             width: 70,
             render: (url, record) => (
                 <Avatar
                     shape="square"
                     size={42}
-                    src={url || 'https://images.unsplash.com/photo-1559454403-b8fb88521f11?w=400'}
+                    src={getImageUrl(url || record.image_url) || 'https://images.unsplash.com/photo-1559454403-b8fb88521f11?w=400'}
                     style={{ borderRadius: '10px' }}
                 />
             )
@@ -151,10 +214,45 @@ const InventoryScreen = () => {
             render: (text) => <strong style={{ color: '#4a2e35' }}>{text}</strong>
         },
         {
+            title: 'Store Company',
+            dataIndex: 'company_name',
+            key: 'company_name',
+            render: (cName) => (
+                <Tag color="blue" style={{ borderRadius: '10px', fontWeight: 700 }}>
+                    🏬 {cName || 'The Giftify'}
+                </Tag>
+            )
+        },
+        {
             title: 'Category',
             dataIndex: 'category_name',
             key: 'category_name',
-            render: (cat) => <Tag color="purple">{cat || 'General'}</Tag>
+            render: (cat, record) => (
+                <Tag color="purple" style={{ borderRadius: '12px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    {renderCategoryIcon(record.category_icon, 13)} {cat || 'General'}
+                </Tag>
+            )
+        },
+        {
+            title: 'Variant & UOM',
+            key: 'variants',
+            render: (_, record) => (
+                <Space size={4} wrap>
+                    <Tag color="cyan" style={{ borderRadius: '10px', fontWeight: 700 }}>
+                        {record.uom || 'Pcs'}
+                    </Tag>
+                    {record.color && (
+                        <Tag color="magenta" style={{ borderRadius: '10px', fontWeight: 600 }}>
+                            🎨 {record.color}
+                        </Tag>
+                    )}
+                    {record.size && (
+                        <Tag color="orange" style={{ borderRadius: '10px', fontWeight: 600 }}>
+                            📐 {record.size}
+                        </Tag>
+                    )}
+                </Space>
+            )
         },
         {
             title: 'Stock Level',
@@ -197,6 +295,14 @@ const InventoryScreen = () => {
                             style={{ background: '#38bdf8', border: 'none', borderRadius: '8px' }}
                         />
                     </Tooltip>
+                    <Tooltip title="Duplicate / Copy Item to Create Variant">
+                        <Button
+                            size="small"
+                            icon={<CopyOutlined style={{ color: '#c084fc' }} />}
+                            onClick={() => handleDuplicateProduct(record)}
+                            style={{ borderRadius: '8px', borderColor: '#e9d5ff' }}
+                        />
+                    </Tooltip>
                     <Tooltip title="Edit Details">
                         <Button
                             size="small"
@@ -221,67 +327,89 @@ const InventoryScreen = () => {
                             <h2 style={{ margin: 0, color: '#4a2e35', fontWeight: 800 }}>Inventory & Stock Management</h2>
                             <span style={{ color: '#8c6a74', fontSize: '13px' }}>Monitor product stock levels, categories, and replenishment</span>
                         </div>
-                        <Button
-                            type="primary"
-                            icon={<PlusOutlined />}
-                            onClick={handleOpenAddProduct}
-                            className="btn-girly"
-                            style={{ height: '40px', padding: '0 20px' }}
-                        >
-                            Add New Product
-                        </Button>
+                        <Space>
+                            <Button
+                                icon={<HistoryOutlined />}
+                                onClick={handleOpenHistoryModal}
+                                loading={movementsLoading}
+                                style={{ borderRadius: '10px', borderColor: '#38bdf8', color: '#0284c7', fontWeight: 600 }}
+                            >
+                                Intake History Log
+                            </Button>
+                            <Button icon={<ReloadOutlined />} onClick={fetchProducts} loading={loading} style={{ borderRadius: '10px' }}>
+                                Refresh
+                            </Button>
+                            <Button
+                                type="primary"
+                                icon={<PlusOutlined />}
+                                onClick={handleOpenAddProduct}
+                                style={{
+                                    borderRadius: '10px',
+                                    background: 'linear-gradient(135deg, #ff758c 0%, #ff758c 100%)',
+                                    border: 'none', fontWeight: 700
+                                }}
+                            >
+                                Add Product
+                            </Button>
+                        </Space>
                     </div>
 
                     {lowStockCount > 0 && (
                         <Alert
-                            message={`Low Stock Warning: ${lowStockCount} item(s) are at or below their alert threshold.`}
+                            message={`Attention: ${lowStockCount} item(s) are at or below low-stock threshold!`}
                             type="warning"
                             showIcon
-                            action={
-                                <Button
-                                    size="small"
-                                    type="link"
-                                    onClick={() => setLowStockFilter(!lowStockFilter)}
-                                >
-                                    {lowStockFilter ? "Show All Items" : "View Low Stock Only"}
-                                </Button>
-                            }
-                            style={{ marginBottom: '16px', borderRadius: '14px' }}
+                            style={{ marginBottom: '16px', borderRadius: '12px' }}
                         />
                     )}
 
-                    <Card className="glass-card">
-                        {/* Search and Filters */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-                            <Space wrap>
-                                <Input
-                                    prefix={<SearchOutlined style={{ color: '#ff758c' }} />}
-                                    placeholder="Search product or barcode..."
-                                    value={searchText}
-                                    onChange={(e) => setSearchText(e.target.value)}
-                                    style={{ width: 240, borderRadius: '16px' }}
-                                />
+                    <Card style={{ borderRadius: '16px', border: '1px solid #ffe3e8' }}>
+                        <div style={{ marginBottom: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            <Input
+                                prefix={<SearchOutlined style={{ color: '#ff758c' }} />}
+                                placeholder="Search product name or barcode..."
+                                value={searchText}
+                                onChange={(e) => setSearchText(e.target.value)}
+                                style={{ width: 260, borderRadius: '10px' }}
+                                allowClear
+                            />
+                            {(user?.is_superuser || role === 'Admin') && (
                                 <Select
-                                    placeholder="Filter by Category"
+                                    placeholder="Filter by Company"
                                     allowClear
-                                    style={{ width: 180, borderRadius: '16px' }}
-                                    onChange={(val) => setSelectedCategory(val)}
+                                    onChange={(val) => setSelectedCompanyFilter(val)}
+                                    style={{ width: 180 }}
                                 >
-                                    {categories.map(c => (
-                                        <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
+                                    {companies.map(c => (
+                                        <Select.Option key={c.id} value={c.id}>🏬 {c.name}</Select.Option>
                                     ))}
                                 </Select>
-                            </Space>
-                            <Tooltip title="Refresh Table">
-                                <Button icon={<ReloadOutlined />} onClick={fetchProducts} style={{ borderRadius: '16px' }} />
-                            </Tooltip>
+                            )}
+                            <Select
+                                placeholder="Filter by category"
+                                allowClear
+                                onChange={(val) => setSelectedCategory(val)}
+                                style={{ width: 180 }}
+                            >
+                                {categories.map(c => (
+                                    <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
+                                ))}
+                            </Select>
+                            <Button
+                                type={lowStockFilter ? "primary" : "default"}
+                                danger={lowStockFilter}
+                                onClick={() => setLowStockFilter(!lowStockFilter)}
+                                style={{ borderRadius: '10px' }}
+                            >
+                                {lowStockFilter ? "Show All Stock" : "Low Stock Alert Only"}
+                            </Button>
                         </div>
 
                         <Table
-                            loading={loading}
-                            columns={columns}
                             dataSource={filteredProducts}
+                            columns={columns}
                             rowKey="id"
+                            loading={loading}
                             pagination={{ pageSize: 8 }}
                         />
                     </Card>
@@ -292,10 +420,85 @@ const InventoryScreen = () => {
                         open={openModal}
                         categories={categories}
                         isRestock={isRestock}
-                        initialValues={editingProduct}
+                        initialValues={editingProduct || duplicateValues}
                         onSubmit={handleSubmitModal}
                         onCancel={() => setOpenModal(false)}
                     />
+
+                    {/* Stock Movement & Intake Audit Log Modal */}
+                    <Modal
+                        title={<span style={{ fontWeight: 800, color: '#4a2e35' }}>📥 Stock Intake & Movement History Audit</span>}
+                        open={isHistoryModalOpen}
+                        onCancel={() => setIsHistoryModalOpen(false)}
+                        footer={null}
+                        width={900}
+                        style={{ borderRadius: 20 }}
+                    >
+                        <Table
+                            dataSource={stockMovements}
+                            loading={movementsLoading}
+                            rowKey="id"
+                            pagination={{ pageSize: 8 }}
+                            columns={[
+                                {
+                                    title: 'Date & Time',
+                                    dataIndex: 'created_at',
+                                    key: 'created_at',
+                                    render: (d) => d ? dayjs(d).format('DD-MMM-YYYY H:mm:ss') : 'N/A'
+                                },
+                                {
+                                    title: 'Movement Type',
+                                    dataIndex: 'movement_type',
+                                    key: 'movement_type',
+                                    render: (t) => (
+                                        <Tag color={t === 'RESTOCK' ? 'cyan' : t === 'SALE' ? 'pink' : 'purple'} style={{ borderRadius: 10, fontWeight: 700 }}>
+                                            {t === 'RESTOCK' ? '📥 RESTOCK INTAKE' : t === 'SALE' ? '🛍️ POS SALE' : t}
+                                        </Tag>
+                                    )
+                                },
+                                {
+                                    title: 'Product',
+                                    dataIndex: 'product_name',
+                                    key: 'product_name',
+                                    render: (name) => <strong style={{ color: '#4a2e35' }}>{name}</strong>
+                                },
+                                {
+                                    title: 'Store Company',
+                                    dataIndex: 'company_name',
+                                    key: 'company_name',
+                                    render: (cName) => <Tag color="blue" style={{ borderRadius: 10 }}>🏬 {cName || 'The Giftify'}</Tag>
+                                },
+                                {
+                                    title: 'Quantity',
+                                    dataIndex: 'qty',
+                                    key: 'qty',
+                                    render: (q, r) => (
+                                        <strong style={{ color: r.movement_type === 'RESTOCK' ? '#059669' : '#dc2626' }}>
+                                            {r.movement_type === 'RESTOCK' ? `+${q}` : `-${q}`}
+                                        </strong>
+                                    )
+                                },
+                                {
+                                    title: 'Unit Cost',
+                                    dataIndex: 'unit_price',
+                                    key: 'unit_price',
+                                    render: (p) => `$${parseFloat(p || 0).toFixed(2)}`
+                                },
+                                {
+                                    title: 'Subtotal Value',
+                                    dataIndex: 'sub_total_price',
+                                    key: 'sub_total_price',
+                                    render: (s) => <strong style={{ color: '#ff758c' }}>${parseFloat(s || 0).toFixed(2)}</strong>
+                                },
+                                {
+                                    title: 'Handled By',
+                                    dataIndex: 'created_by',
+                                    key: 'created_by',
+                                    render: (u) => u || 'System'
+                                }
+                            ]}
+                        />
+                    </Modal>
                 </Content>
             </Layout>
         </Layout>

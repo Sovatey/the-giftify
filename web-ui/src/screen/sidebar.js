@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Layout, Menu, Button, Avatar, Tag } from "antd";
+import { Layout, Menu, Button, Avatar, Tag, Select, ConfigProvider } from "antd";
 import {
     ShoppingOutlined,
     LineChartOutlined,
@@ -9,21 +9,53 @@ import {
     RightOutlined,
     LeftOutlined,
     HeartOutlined,
-    ShareAltOutlined
+    ShareAltOutlined,
+    ShopOutlined,
+    TagsOutlined,
+    ImportOutlined
 } from "@ant-design/icons";
-
-import Logo from "../assets/images/logo-round.png";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ConfigProvider } from 'antd';
+import Logo from "../assets/images/logo-round.png";
 import { useAuth } from "../context/AuthContext";
+import api from "../services/api";
 
 const { Sider } = Layout;
 
 const Sidebar = () => {
     const [collapsed, setCollapsed] = useState(false);
+    const [companies, setCompanies] = useState([]);
+    const [selectedCompanyId, setSelectedCompanyId] = useState(
+        localStorage.getItem('selectedCompanyId') || ''
+    );
     const navigate = useNavigate();
     const location = useLocation();
     const { user, role, logout, hasPermission } = useAuth();
+
+    const assignedCompanies = user?.companies_details || [];
+    const isSuperAdminOrAdmin = user?.is_superuser || role === 'Admin';
+    const availableCompanies = isSuperAdminOrAdmin ? companies : assignedCompanies;
+    const hasMultipleCompanies = availableCompanies.length > 1;
+
+    React.useEffect(() => {
+        if (isSuperAdminOrAdmin) {
+            api.get('/user/companies/').then(res => {
+                const list = res.data.results || res.data || [];
+                setCompanies(list);
+            }).catch(() => {});
+        } else if (assignedCompanies.length > 1) {
+            setCompanies(assignedCompanies);
+        }
+    }, [user, role]);
+
+    const handleCompanyChange = (val) => {
+        if (val) {
+            localStorage.setItem('selectedCompanyId', val);
+        } else {
+            localStorage.removeItem('selectedCompanyId');
+        }
+        setSelectedCompanyId(val);
+        window.location.reload();
+    };
 
     const toggleSidebar = () => {
         setCollapsed(!collapsed);
@@ -52,16 +84,22 @@ const Sidebar = () => {
             permissionKey: "/inventory"
         },
         {
+            key: "/stock-intake",
+            label: "Stock Intake History",
+            icon: <ImportOutlined style={{ fontSize: '18px', color: '#0284c7' }} />,
+            permissionKey: "/inventory"
+        },
+        {
+            key: "/categories",
+            label: "Category Management",
+            icon: <TagsOutlined style={{ fontSize: '18px', color: '#ec4899' }} />,
+            permissionKey: "/inventory"
+        },
+        {
             key: "/dashboard",
             label: "Sales Analytics",
             icon: <LineChartOutlined style={{ fontSize: '18px', color: '#c084fc' }} />,
             permissionKey: "/dashboard"
-        },
-        {
-            key: "/user",
-            label: "User & Role Management",
-            icon: <UserOutlined style={{ fontSize: '18px', color: '#38bdf8' }} />,
-            permissionKey: "/user"
         },
         {
             key: "/social-publisher",
@@ -69,11 +107,27 @@ const Sidebar = () => {
             icon: <ShareAltOutlined style={{ fontSize: '18px', color: '#f43f5e' }} />,
             permissionKey: "/social-publisher"
         },
+        {
+            key: "/companies",
+            label: "Company Management",
+            icon: <ShopOutlined style={{ fontSize: '18px', color: '#10b981' }} />,
+            adminOnly: true,
+            permissionKey: "/user"
+        },
+        {
+            key: "/user",
+            label: "User & Role Management",
+            icon: <UserOutlined style={{ fontSize: '18px', color: '#38bdf8' }} />,
+            adminOnly: true,
+            permissionKey: "/user"
+        },
     ];
 
-
     // Filter menu items dynamically based on user's role permissions!
-    const filteredMenuItems = allMenuItems.filter(item => hasPermission(item.permissionKey, 'view'));
+    const filteredMenuItems = allMenuItems.filter(item => {
+        if (item.adminOnly && !user?.is_superuser && role !== 'Admin') return false;
+        return hasPermission(item.permissionKey, 'view');
+    });
 
     const getRoleColor = (r) => {
         if (r === 'Admin') return '#ff758c';
@@ -193,16 +247,50 @@ const Sidebar = () => {
                             <Avatar style={{ backgroundColor: '#ff758c' }} icon={<UserOutlined />}>
                                 {user?.name?.[0] || 'U'}
                             </Avatar>
-                            <div style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
                                 <div style={{ fontWeight: '700', fontSize: '13px', color: '#4a2e35', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                                     {user?.name || user?.username || 'Guest Staff'}
                                 </div>
-                                <div>
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                                     <Tag color={getRoleColor(role)} style={{ borderRadius: '10px', fontSize: '10px', margin: 0, fontWeight: 700, padding: '1px 8px' }}>
                                         {role}
                                     </Tag>
+                                    {assignedCompanies.length > 0 ? (
+                                        assignedCompanies.map(c => (
+                                            <Tag key={c.id} color="green" style={{ borderRadius: '10px', fontSize: '10px', margin: 0, fontWeight: 700, padding: '1px 8px' }}>
+                                                🏬 {c.name}
+                                            </Tag>
+                                        ))
+                                    ) : user?.company_name ? (
+                                        <Tag color="green" style={{ borderRadius: '10px', fontSize: '10px', margin: 0, fontWeight: 700, padding: '1px 8px' }}>
+                                            🏬 {user.company_name}
+                                        </Tag>
+                                    ) : null}
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Multi-Company Switcher Dropdown (Only shown if user has access to multiple companies!) */}
+                    {!collapsed && hasMultipleCompanies && (
+                        <div style={{ margin: "0 12px 14px 12px", padding: "8px 10px", borderRadius: "12px", background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                            <div style={{ fontSize: "10px", fontWeight: 700, color: "#166534", marginBottom: "4px" }}>
+                                🏬 SWITCH STORE SCOPE:
+                            </div>
+                            <Select
+                                key={availableCompanies.length}
+                                size="small"
+                                style={{ width: "100%" }}
+                                value={selectedCompanyId ? String(selectedCompanyId) : ''}
+                                onChange={handleCompanyChange}
+                                options={[
+                                    { value: '', label: '🌐 All Assigned Companies' },
+                                    ...availableCompanies.map(c => ({
+                                        value: String(c.id),
+                                        label: `🏬 ${c.name} ${c.code ? `(${c.code})` : ''}`
+                                    }))
+                                ]}
+                            />
                         </div>
                     )}
 

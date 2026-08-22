@@ -4,6 +4,9 @@ from django.utils import timezone
 from products.models import Product
 
 
+from user.models import Company
+
+
 def generate_invoice_no():
     stamp = timezone.now().strftime('%Y%m%d%H%M')
     rand = random.randint(100, 999)
@@ -22,6 +25,7 @@ class SaleOrder(models.Model):
         ('CANCELLED', 'Cancelled'),
     )
 
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True, related_name='sale_orders')
     invoice_no = models.CharField(max_length=50, unique=True, default=generate_invoice_no)
     cashier_name = models.CharField(max_length=100, default='Cashier')
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
@@ -46,6 +50,7 @@ class SaleOrderItem(models.Model):
     sale_order = models.ForeignKey(SaleOrder, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, related_name='sale_items')
     product_name = models.CharField(max_length=255)
+    selected_color = models.CharField(max_length=100, blank=True, null=True)
     qty = models.IntegerField(default=1)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
@@ -54,4 +59,5 @@ class SaleOrderItem(models.Model):
         db_table = 'tbl_sale_order_items'
 
     def __str__(self):
-        return f"{self.product_name} x {self.qty}"
+        color_str = f" ({self.selected_color})" if self.selected_color else ""
+        return f"{self.product_name}{color_str} x {self.qty}"

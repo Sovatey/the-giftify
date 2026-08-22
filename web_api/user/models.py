@@ -37,6 +37,25 @@ class UserManager(auth_models.BaseUserManager):
         )
 
 
+class Company(models.Model):
+    name = models.CharField(max_length=255)
+    code = models.CharField(max_length=50, unique=True, help_text="Unique company identifier code")
+    logo = models.FileField(upload_to=upload_to, blank=True, null=True)
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    email = models.EmailField(max_length=255, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "tbl_companies"
+        verbose_name = "Company"
+        verbose_name_plural = "Companies"
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
 class UserGroup(models.Model):
     name = models.CharField(max_length=255)
     description = models.CharField(max_length=255, blank=True, null=True)
@@ -65,6 +84,8 @@ class User(auth_models.AbstractUser):
     created_by = models.IntegerField(blank=True, default=0)
     avatar = models.FileField(blank=True, upload_to=upload_to, null=True)
     group = models.ForeignKey(UserGroup, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
+    company = models.ForeignKey(Company, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
+    companies = models.ManyToManyField(Company, blank=True, related_name='assigned_users')
     ref_id = models.IntegerField(default=0, blank=True, null=True)
 
     objects = UserManager()

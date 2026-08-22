@@ -74,10 +74,11 @@ button {
 }
 
 /* 3D Claymorphic Gradient Buttons */
+.ant-btn-primary.btn-girly,
 .btn-girly,
 .btn-3d {
-  background: linear-gradient(145deg, #ffaead 0%, #ff758c 100%) !important;
-  border: none !important;
+  background: linear-gradient(145deg, #ff758c 0%, #ff7eb3 100%) !important;
+  border-color: #ff758c !important;
   color: white !important;
   font-weight: 700 !important;
   border-radius: 25px !important;

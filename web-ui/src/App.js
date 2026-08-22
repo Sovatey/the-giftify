@@ -7,6 +7,9 @@ import DashboardScreen from "./screen/admin/dashboard";
 import InventoryScreen from "./screen/admin/inventory";
 import UserScreen from "./screen/admin/user";
 import SocialPublisherScreen from "./screen/admin/social_publisher";
+import CompanyManagement from "./screen/admin/companyManagement";
+import CategoryManagement from "./screen/admin/categoryManagement";
+import StockIntakeScreen from "./screen/admin/stockIntake";
 
 
 import FloatingDecorations from "./components/FloatingDecorations";
@@ -70,6 +73,33 @@ const RoutesConfig = () => {
           element={
             <ProtectedRoute routePath="/inventory">
               <InventoryScreen />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/stock-intake"
+          element={
+            <ProtectedRoute routePath="/inventory">
+              <StockIntakeScreen />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/categories"
+          element={
+            <ProtectedRoute routePath="/inventory">
+              <CategoryManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/companies"
+          element={
+            <ProtectedRoute routePath="/user">
+              <CompanyManagement />
             </ProtectedRoute>
           }
         />

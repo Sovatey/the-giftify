@@ -9,9 +9,9 @@ class SaleOrderItemInline(admin.TabularInline):
 
 @admin.register(SaleOrder)
 class SaleOrderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'invoice_no', 'cashier_name', 'grand_total', 'payment_method', 'status', 'created_at')
+    list_display = ('id', 'invoice_no', 'company', 'cashier_name', 'grand_total', 'payment_method', 'status', 'created_at')
     search_fields = ('invoice_no', 'cashier_name')
-    list_filter = ('payment_method', 'status', 'created_at')
+    list_filter = ('company', 'payment_method', 'status', 'created_at')
     inlines = [SaleOrderItemInline]
 
 

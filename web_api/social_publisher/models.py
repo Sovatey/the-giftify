@@ -1,6 +1,8 @@
 from django.db import models
 from django.utils import timezone
 
+from user.models import Company
+
 def social_media_upload_path(instance, filename):
     stamp = timezone.now().strftime('%Y%m%d_%H%M%S')
     return f"social_posts/{stamp}_{filename}"
@@ -13,6 +15,7 @@ class SocialAccount(models.Model):
         ('tiktok', 'TikTok Account'),
     )
 
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True, related_name='social_accounts')
     platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES)
     name = models.CharField(max_length=255, help_text="Account/Channel Name")
     app_id_or_bot_token = models.CharField(max_length=500, blank=True, null=True, help_text="App ID / Bot Token")
@@ -65,6 +68,7 @@ class SocialPost(models.Model):
         ('TEXT', 'Telegram Text Message'),
     )
 
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True, related_name='social_posts')
     title = models.CharField(max_length=255)
     content = models.TextField(help_text="Post body / caption")
     image_url = models.CharField(max_length=1000, blank=True, null=True, help_text="Primary image URL")
@@ -130,6 +134,7 @@ class SocialPostLog(models.Model):
         ('FAILED', 'Failed'),
     )
 
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True, related_name='social_post_logs')
     post = models.ForeignKey(SocialPost, on_delete=models.CASCADE, related_name='logs')
     platform = models.CharField(max_length=20)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
