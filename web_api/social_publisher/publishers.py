@@ -226,33 +226,52 @@ class TelegramPublisher:
     def publish(account: SocialAccount, post: SocialPost):
         bot_token = account.app_id_or_bot_token
         chat_id = account.page_id_or_chat_id
-        image_items = get_all_media_items(post, 'image')
-        video_items = get_all_media_items(post, 'video')
-        all_items = image_items + video_items
-        
-        # Dynamically determine media type based on actual attached files
-        actual_type = 'VIDEO' if video_items else 'PHOTO' if image_items else 'TEXT'
-        total_media_count = len(all_items)
+
+        tg_type = (post.telegram_post_type or 'PHOTO').upper()
+
+        if tg_type == 'PHOTO':
+            items = get_all_media_items(post, 'image')
+            item_kind = 'photo'
+        elif tg_type == 'VIDEO':
+            items = get_all_media_items(post, 'video')
+            item_kind = 'video'
+        elif tg_type == 'TEXT':
+            items = []
+            item_kind = 'text'
+        else:
+            image_items = get_all_media_items(post, 'image')
+            video_items = get_all_media_items(post, 'video')
+            if video_items and not image_items:
+                items = video_items
+                item_kind = 'video'
+            elif image_items:
+                items = image_items
+                item_kind = 'photo'
+            else:
+                items = []
+                item_kind = 'text'
+
+        total_media_count = len(items)
 
         if account.is_simulated or not bot_token or not chat_id:
-            msg_type = f"Media Album ({total_media_count} files)" if total_media_count > 1 else actual_type
+            msg_type = f"Photo Album ({total_media_count} photos)" if (item_kind == 'photo' and total_media_count > 1) else f"Video Album ({total_media_count} videos)" if (item_kind == 'video' and total_media_count > 1) else tg_type
             return {
                 'success': True,
                 'external_id': f"sim_tg_{int(timezone.now().timestamp())}",
                 'message': f"[Simulated Telegram Post] Sent {msg_type} successfully to Chat ID: {chat_id or '@demo_group'}"
             }
-            
+
         try:
             caption_html = f"<b>{post.title}</b>\n\n{post.content}"
             file_handles = []
 
-            # 1. Multi-media album (sendMediaGroup)
+            # 1. Multi-photo / Multi-video album (sendMediaGroup)
             if total_media_count > 1:
                 url = f"https://api.telegram.org/bot{bot_token}/sendMediaGroup"
                 media_group = []
                 files = {}
 
-                for idx, item in enumerate(all_items):
+                for idx, item in enumerate(items):
                     attach_name = f"media_{idx}"
                     if item.get('file_path') and os.path.exists(item['file_path']):
                         fh = open(item['file_path'], 'rb')
@@ -263,12 +282,11 @@ class TelegramPublisher:
                         media_ref = item['url']
 
                     media_group.append({
-                        'type': 'photo' if item['type'] == 'image' else 'video',
+                        'type': item_kind,
                         'media': media_ref,
                         'caption': caption_html if idx == 0 else '',
                         'parse_mode': 'HTML'
                     })
-
 
                 data = {
                     'chat_id': chat_id,
@@ -277,14 +295,14 @@ class TelegramPublisher:
                 response = requests.post(url, data=data, files=files if files else None, timeout=30)
 
             # 2. Single Video (sendVideo)
-            elif actual_type == 'VIDEO' and video_items:
+            elif item_kind == 'video' and total_media_count == 1:
                 url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
                 data = {
                     'chat_id': chat_id,
                     'caption': caption_html,
                     'parse_mode': 'HTML'
                 }
-                item = video_items[0]
+                item = items[0]
                 if item.get('file_path') and os.path.exists(item['file_path']):
                     fh = open(item['file_path'], 'rb')
                     file_handles.append(fh)
@@ -294,14 +312,14 @@ class TelegramPublisher:
                     response = requests.post(url, data=data, timeout=30)
 
             # 3. Single Photo (sendPhoto)
-            elif actual_type == 'PHOTO' and image_items:
+            elif item_kind == 'photo' and total_media_count == 1:
                 url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
                 data = {
                     'chat_id': chat_id,
                     'caption': caption_html,
                     'parse_mode': 'HTML'
                 }
-                item = image_items[0]
+                item = items[0]
                 if item.get('file_path') and os.path.exists(item['file_path']):
                     fh = open(item['file_path'], 'rb')
                     file_handles.append(fh)
@@ -334,7 +352,7 @@ class TelegramPublisher:
                 return {
                     'success': True,
                     'external_id': msg_id,
-                    'message': f'Successfully sent Telegram post ({total_media_count} media files)'
+                    'message': f'Successfully sent Telegram post ({total_media_count} {item_kind} files)'
                 }
             else:
                 err_msg = res_data.get('description', response.text)
