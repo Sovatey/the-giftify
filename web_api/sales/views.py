@@ -14,7 +14,7 @@ from utils.tenant_mixin import TenantViewSetMixin
 
 
 class SaleOrderViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
-    queryset = SaleOrder.objects.all().order_by('-created_at')
+    queryset = SaleOrder.objects.select_related('company').prefetch_related('items').all().order_by('-created_at')
     serializer_class = SaleOrderSerializer
     permission_classes = [AllowAny]
 

@@ -19,7 +19,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 
 class ProductViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
-    queryset = Product.objects.all().order_by('-id')
+    queryset = Product.objects.select_related('company', 'category').all().order_by('-id')
     serializer_class = ProductSerializer
     permission_classes = [AllowAny]
     parser_classes = [MultiPartParser, FormParser, JSONParser]

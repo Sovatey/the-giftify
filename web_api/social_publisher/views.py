@@ -182,17 +182,10 @@ class SocialAccountViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
 
 
 class SocialPostViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
-    queryset = SocialPost.objects.all().order_by('-created_at')
+    queryset = SocialPost.objects.select_related('company').prefetch_related('attachments').all().order_by('-created_at')
     serializer_class = SocialPostSerializer
     permission_classes = [AllowAny]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-
-    def list(self, request, *args, **kwargs):
-        try:
-            check_and_publish_due_posts()
-        except Exception:
-            pass
-        return super().list(request, *args, **kwargs)
 
     def _process_multi_attachments(self, request, post):
         image_files = request.FILES.getlist('image_files')

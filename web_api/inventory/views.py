@@ -9,7 +9,7 @@ from utils.tenant_mixin import TenantViewSetMixin
 
 
 class StockMovementViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
-    queryset = StockMovement.objects.all().order_by('-created_at')
+    queryset = StockMovement.objects.select_related('product', 'company').all().order_by('-created_at')
     serializer_class = StockMovementSerializer
     permission_classes = [AllowAny]
 

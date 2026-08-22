@@ -70,7 +70,7 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all().order_by('-id')
+    queryset = User.objects.select_related('company', 'group').prefetch_related('companies').all().order_by('-id')
     serializer_class = UserSerializer
     permission_classes = [AllowAny]  # Flexible for frontend initial setup
 
