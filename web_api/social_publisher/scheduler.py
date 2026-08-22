@@ -1,8 +1,12 @@
 import logging
-from apscheduler.schedulers.background import BackgroundScheduler
 from django.utils import timezone
 from django.db import close_old_connections
 from datetime import datetime
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+except ImportError:
+    BackgroundScheduler = None
 
 logger = logging.getLogger(__name__)
 scheduler = None
@@ -96,6 +100,10 @@ def check_and_publish_due_posts():
 
 def start_scheduler():
     global scheduler
+    if not BackgroundScheduler:
+        print("[SocialPublisher] Background scheduler disabled (apscheduler library not installed).")
+        return
+
     if scheduler and scheduler.running:
         return
 
