@@ -11,7 +11,7 @@ import {
   ReloadOutlined, DeleteOutlined, EditOutlined, ShareAltOutlined,
   UploadOutlined, VideoCameraOutlined, PictureOutlined, KeyOutlined,
   CalendarOutlined, FireOutlined, UserOutlined, AppstoreOutlined,
-  UnorderedListOutlined
+  UnorderedListOutlined, CopyOutlined, HolderOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import Sidebar from '../sidebar';
@@ -74,8 +74,17 @@ const SocialPublisherScreen = () => {
   const [testedAccounts, setTestedAccounts] = useState({});
   const [isConnectingTikTok, setIsConnectingTikTok] = useState(false);
 
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [copyingPost, setCopyingPost] = useState(null);
+  const [copyScheduleType, setCopyScheduleType] = useState('WEEKLY_RECURRING');
+
+  const [draggedPost, setDraggedPost] = useState(null);
+  const [dragSourceDay, setDragSourceDay] = useState(null);
+  const [dragOverDay, setDragOverDay] = useState(null);
+
   const [postForm] = Form.useForm();
   const [accountForm] = Form.useForm();
+  const [copyForm] = Form.useForm();
 
   // Handle TikTok OAuth Redirect Code Exchange on Page Load
   const handleTikTokCallback = async () => {
@@ -247,6 +256,153 @@ const SocialPublisherScreen = () => {
       daily_time: record.daily_time ? dayjs(record.daily_time, 'HH:mm:ss') : null,
     });
     setIsPostModalOpen(true);
+  };
+
+  // Open Copy Post Modal
+  const openCopyPostModal = (post) => {
+    setCopyingPost(post);
+    const defaultType = post.schedule_type === 'ONE_TIME' ? 'ONE_TIME' : 'WEEKLY_RECURRING';
+    setCopyScheduleType(defaultType);
+
+    const currentDays = post.recurring_days && post.recurring_days.length > 0 ? post.recurring_days : ['MON'];
+
+    copyForm.setFieldsValue({
+      title: `Copy of ${post.title}`,
+      schedule_type: defaultType,
+      target_days: currentDays,
+      daily_time: post.daily_time ? dayjs(post.daily_time, 'HH:mm:ss') : dayjs('09:00:00', 'HH:mm:ss'),
+      scheduled_at: post.scheduled_at ? dayjs(post.scheduled_at) : dayjs().add(1, 'day')
+    });
+    setIsCopyModalOpen(true);
+  };
+
+  // Submit Copy Post
+  const handleCopyPostSubmit = async (values) => {
+    if (!copyingPost) return;
+    try {
+      setLoading(true);
+      const payload = {
+        title: values.title,
+        schedule_type: values.schedule_type,
+      };
+
+      if (values.schedule_type === 'WEEKLY_RECURRING') {
+        payload.target_days = values.target_days;
+        if (values.daily_time) {
+          payload.daily_time = values.daily_time.format('HH:mm:ss');
+        }
+      } else if (values.schedule_type === 'ONE_TIME') {
+        if (values.scheduled_at) {
+          payload.target_date = values.scheduled_at.format('YYYY-MM-DD HH:mm:ss');
+        }
+      }
+
+      const res = await api.post(`/social/posts/${copyingPost.id}/copy/`, payload);
+      if (res.status === 201 || res.data) {
+        message.success('Post copied to target day(s) successfully! 🚀');
+        setIsCopyModalOpen(false);
+        setCopyingPost(null);
+        copyForm.resetFields();
+        fetchData();
+      }
+    } catch (err) {
+      console.error(err);
+      message.error(err.response?.data?.message || 'Failed to copy post to other day');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Drag & Drop Handlers for Calendar Posts
+  const handleDragStart = (e, post, fromDay) => {
+    setDraggedPost(post);
+    setDragSourceDay(fromDay);
+    e.dataTransfer.setData('text/plain', JSON.stringify({ postId: post.id, fromDay }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, targetDay) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverDay !== targetDay) {
+      setDragOverDay(targetDay);
+    }
+  };
+
+  const handleDragLeave = (e, dayValue) => {
+    e.preventDefault();
+    if (dragOverDay === dayValue) {
+      setDragOverDay(null);
+    }
+  };
+
+  const handleDropOnDay = async (e, targetDayValue) => {
+    e.preventDefault();
+    setDragOverDay(null);
+
+    let postToMove = draggedPost;
+    let fromDay = dragSourceDay;
+
+    try {
+      const dataStr = e.dataTransfer.getData('text/plain');
+      if (dataStr) {
+        const parsed = JSON.parse(dataStr);
+        if (parsed.postId) {
+          postToMove = posts.find(p => p.id === parsed.postId) || draggedPost;
+          fromDay = parsed.fromDay || dragSourceDay;
+        }
+      }
+    } catch (err) {
+      // fallback
+    }
+
+    if (!postToMove || fromDay === targetDayValue) {
+      setDraggedPost(null);
+      setDragSourceDay(null);
+      return;
+    }
+
+    const targetDayObj = DAYS_OF_WEEK.find(d => d.value === targetDayValue);
+    const targetLabel = targetDayObj ? targetDayObj.label : targetDayValue;
+
+    // Optimistically update local posts state
+    setPosts(prevPosts =>
+      prevPosts.map(p => {
+        if (p.id === postToMove.id) {
+          if (p.schedule_type === 'WEEKLY_RECURRING') {
+            const currentDays = [...(p.recurring_days || [])];
+            const updatedDays = currentDays.filter(d => d !== fromDay);
+            if (!updatedDays.includes(targetDayValue)) {
+              updatedDays.push(targetDayValue);
+            }
+            return { ...p, recurring_days: updatedDays };
+          } else {
+            return { ...p, schedule_type: 'WEEKLY_RECURRING', recurring_days: [targetDayValue] };
+          }
+        }
+        return p;
+      })
+    );
+
+    message.success({
+      content: `Moved post to ${targetLabel}! 🚀`,
+      key: `move-${postToMove.id}`
+    });
+
+    setDraggedPost(null);
+    setDragSourceDay(null);
+
+    try {
+      await api.post(`/social/posts/${postToMove.id}/move/`, {
+        from_day: fromDay,
+        target_day: targetDayValue
+      });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      message.error(`Failed to sync moved post to server`);
+      fetchData();
+    }
   };
 
   // Post Submission Handler
@@ -663,6 +819,14 @@ const SocialPublisherScreen = () => {
               Post Now
             </Button>
           </Tooltip>
+          <Tooltip title="Copy Post to Other Day">
+            <Button
+              size="small"
+              icon={<CopyOutlined style={{ color: '#1890ff' }} />}
+              style={{ borderRadius: 8 }}
+              onClick={() => openCopyPostModal(record)}
+            />
+          </Tooltip>
           <Button
             size="small"
             icon={<EditOutlined />}
@@ -921,17 +1085,23 @@ const SocialPublisherScreen = () => {
                           return (
                             <div
                               key={day.value}
+                              onDragOver={(e) => handleDragOver(e, day.value)}
+                              onDragEnter={(e) => handleDragOver(e, day.value)}
+                              onDragLeave={(e) => handleDragLeave(e, day.value)}
+                              onDrop={(e) => handleDropOnDay(e, day.value)}
                               style={{
                                 flex: '0 0 250px',
                                 minWidth: '250px',
-                                background: '#ffffff',
+                                background: dragOverDay === day.value ? '#fff5f7' : '#ffffff',
                                 borderRadius: 16,
-                                border: `2px solid ${day.color}33`,
+                                border: dragOverDay === day.value ? `2px dashed ${day.color}` : `2px solid ${day.color}33`,
+                                transform: dragOverDay === day.value ? 'scale(1.02)' : 'scale(1)',
+                                transition: 'all 0.2s ease',
                                 height: 500,
                                 maxHeight: 500,
                                 display: 'flex',
                                 flexDirection: 'column',
-                                boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+                                boxShadow: dragOverDay === day.value ? `0 8px 24px ${day.color}40` : '0 2px 10px rgba(0,0,0,0.02)'
                               }}
                             >
                               {/* Header Day Title */}
@@ -979,6 +1149,8 @@ const SocialPublisherScreen = () => {
                                       return (
                                         <div
                                           key={p.id}
+                                          draggable={true}
+                                          onDragStart={(e) => handleDragStart(e, p, day.value)}
                                           style={{
                                             background: '#ffffff',
                                             borderRadius: 12,
@@ -988,10 +1160,12 @@ const SocialPublisherScreen = () => {
                                             alignItems: 'center',
                                             justifyContent: 'space-between',
                                             gap: '8px',
-                                            boxShadow: '0 2px 6px rgba(255, 117, 140, 0.04)'
+                                            boxShadow: '0 2px 6px rgba(255, 117, 140, 0.04)',
+                                            cursor: 'grab'
                                           }}
                                         >
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                                            <HolderOutlined style={{ color: '#ccc', cursor: 'grab', fontSize: 13, flexShrink: 0 }} />
                                             {imgUrl ? (
                                               <img src={imgUrl} alt="" style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
                                             ) : (
@@ -1033,6 +1207,16 @@ const SocialPublisherScreen = () => {
                                                 onClick={() => handlePublishNow(p.id)}
                                               />
                                             </Tooltip>
+                                            <Tooltip title="Copy to Other Day">
+                                              <Button
+                                                size="small"
+                                                type="text"
+                                                shape="circle"
+                                                icon={<CopyOutlined style={{ color: '#1890ff', fontSize: 12 }} />}
+                                                style={{ width: 22, height: 22, minWidth: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                onClick={() => openCopyPostModal(p)}
+                                              />
+                                            </Tooltip>
                                             <Tooltip title="Edit">
                                               <Button
                                                 size="small"
@@ -1061,6 +1245,8 @@ const SocialPublisherScreen = () => {
                                     return (
                                       <div
                                         key={p.id}
+                                        draggable={true}
+                                        onDragStart={(e) => handleDragStart(e, p, day.value)}
                                         style={{
                                           background: '#ffffff',
                                           borderRadius: 14,
@@ -1069,14 +1255,18 @@ const SocialPublisherScreen = () => {
                                           padding: '12px',
                                           display: 'flex',
                                           flexDirection: 'column',
-                                          gap: '8px'
+                                          gap: '8px',
+                                          cursor: 'grab'
                                         }}
                                       >
                                         {/* Header row: Time & Status */}
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                          <Tag color="gold" style={{ fontSize: 11, borderRadius: 8, fontWeight: 700, margin: 0, padding: '1px 8px' }}>
-                                            ⏰ {p.daily_time || '09:00'}
-                                          </Tag>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <HolderOutlined style={{ color: '#ccc', cursor: 'grab', fontSize: 14 }} />
+                                            <Tag color="gold" style={{ fontSize: 11, borderRadius: 8, fontWeight: 700, margin: 0, padding: '1px 8px' }}>
+                                              ⏰ {p.daily_time || '09:00'}
+                                            </Tag>
+                                          </div>
                                           <Tag color={p.status === 'PUBLISHED' ? 'green' : 'processing'} style={{ fontSize: 10, borderRadius: 6, margin: 0 }}>
                                             {p.status}
                                           </Tag>
@@ -1131,6 +1321,14 @@ const SocialPublisherScreen = () => {
                                           </Button>
 
                                           <Space size={2}>
+                                            <Tooltip title="Copy Post to Other Day">
+                                              <Button
+                                                size="small"
+                                                type="text"
+                                                icon={<CopyOutlined style={{ color: '#1890ff' }} />}
+                                                onClick={() => openCopyPostModal(p)}
+                                              />
+                                            </Tooltip>
                                             <Button
                                               size="small"
                                               type="text"
@@ -1719,6 +1917,91 @@ const SocialPublisherScreen = () => {
                 })}
               </Row>
             </div>
+          </Modal>
+
+          {/* Modal 4: Copy Post to Other Day */}
+          <Modal
+            title={<span style={{ fontWeight: 800, color: '#4a2e35' }}>📋 Copy Post to Other Day / Date</span>}
+            open={isCopyModalOpen}
+            onCancel={() => setIsCopyModalOpen(false)}
+            footer={null}
+            style={{ borderRadius: 20 }}
+            width={520}
+          >
+            {copyingPost && (
+              <div style={{ background: '#fff0f3', borderRadius: 12, padding: '10px 14px', marginBottom: 16, border: '1px solid #ffe4e6' }}>
+                <div style={{ fontSize: 12, color: '#888', fontWeight: 600 }}>Original Post:</div>
+                <div style={{ fontWeight: 700, color: '#4a2e35', fontSize: 14 }}>{copyingPost.title}</div>
+                <div style={{ fontSize: 12, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {copyingPost.content}
+                </div>
+              </div>
+            )}
+
+            <Form form={copyForm} layout="vertical" onFinish={handleCopyPostSubmit}>
+              <Form.Item name="title" label="New Post Title" rules={[{ required: true, message: 'Please enter title' }]}>
+                <Input placeholder="Title for copied post" style={{ borderRadius: 10 }} />
+              </Form.Item>
+
+              <Form.Item name="schedule_type" label="Copy Mode">
+                <Select
+                  value={copyScheduleType}
+                  onChange={(val) => setCopyScheduleType(val)}
+                  options={[
+                    { label: '📅 Weekly Days Recurring (Select Day(s))', value: 'WEEKLY_RECURRING' },
+                    { label: '⏰ Specific One-Time Date & Time', value: 'ONE_TIME' }
+                  ]}
+                  style={{ borderRadius: 10 }}
+                />
+              </Form.Item>
+
+              {copyScheduleType === 'WEEKLY_RECURRING' ? (
+                <>
+                  <Form.Item
+                    name="target_days"
+                    label="Select Target Day(s) of Week to Copy To"
+                    rules={[{ required: true, message: 'Select at least one day' }]}
+                  >
+                    <Checkbox.Group style={{ width: '100%' }}>
+                      <Row gutter={[8, 8]}>
+                        {DAYS_OF_WEEK.map((d) => (
+                          <Col span={8} key={d.value}>
+                            <Checkbox value={d.value}>
+                              <Tag color={d.color} style={{ borderRadius: 8, fontWeight: 700 }}>
+                                {d.label}
+                              </Tag>
+                            </Checkbox>
+                          </Col>
+                        ))}
+                      </Row>
+                    </Checkbox.Group>
+                  </Form.Item>
+
+                  <Form.Item name="daily_time" label="Target Daily Posting Time" rules={[{ required: true }]}>
+                    <TimePicker format="HH:mm" style={{ width: '100%', borderRadius: 10 }} />
+                  </Form.Item>
+                </>
+              ) : (
+                <Form.Item name="scheduled_at" label="Target Date & Time" rules={[{ required: true, message: 'Select target date & time' }]}>
+                  <DatePicker showTime format="YYYY-MM-DD HH:mm:ss" style={{ width: '100%', borderRadius: 10 }} />
+                </Form.Item>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+                <Button onClick={() => setIsCopyModalOpen(false)} style={{ borderRadius: 10 }}>
+                  Cancel
+                </Button>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={loading}
+                  icon={<CopyOutlined />}
+                  style={{ background: 'linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)', borderColor: '#ff758c', borderRadius: 10, padding: '0 24px', fontWeight: 700 }}
+                >
+                  Copy Post
+                </Button>
+              </div>
+            </Form>
           </Modal>
 
         </Content>
