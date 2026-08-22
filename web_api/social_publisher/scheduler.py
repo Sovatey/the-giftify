@@ -1,6 +1,7 @@
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from django.utils import timezone
+from django.db import close_old_connections
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ def check_and_publish_due_posts():
     3. WEEKLY_RECURRING posts whose selected days (e.g. MON, TUE) match today,
        daily_time matches, and haven't been published today.
     """
+    close_old_connections()
     try:
         from .models import SocialPost
         from .publishers import PublisherEngine
@@ -39,6 +41,7 @@ def check_and_publish_due_posts():
             updated = SocialPost.objects.filter(id=post.id, status='SCHEDULED').update(status='PROCESSING')
             if updated > 0:
                 logger.info(f"[AutoPoster] Triggering ONE_TIME scheduled post #{post.id}: {post.title}")
+                print(f"[AutoPoster] Triggering ONE_TIME scheduled post #{post.id}: {post.title}")
                 post.refresh_from_db()
                 PublisherEngine.publish_post(post)
 
@@ -58,6 +61,7 @@ def check_and_publish_due_posts():
                     updated = SocialPost.objects.filter(id=post.id).exclude(status='PROCESSING').update(status='PROCESSING')
                     if updated > 0:
                         logger.info(f"[AutoPoster] Triggering DAILY_RECURRING post #{post.id}: {post.title} (Daily at {post_time})")
+                        print(f"[AutoPoster] Triggering DAILY_RECURRING post #{post.id}: {post.title} (Daily at {post_time})")
                         post.refresh_from_db()
                         PublisherEngine.publish_post(post)
 
@@ -70,7 +74,7 @@ def check_and_publish_due_posts():
 
         for post in weekly_posts:
             days = post.recurring_days or []
-            if today_code in days or now.weekday() in days:
+            if today_code in days or str(now.weekday()) in days or now.weekday() in days:
                 already_ran_today = post.last_published_at and timezone.localtime(post.last_published_at).date() == current_date
                 if not already_ran_today and post.status != 'PROCESSING':
                     post_time = post.daily_time
@@ -79,11 +83,15 @@ def check_and_publish_due_posts():
                         updated = SocialPost.objects.filter(id=post.id).exclude(status='PROCESSING').update(status='PROCESSING')
                         if updated > 0:
                             logger.info(f"[AutoPoster] Triggering WEEKLY_RECURRING post #{post.id}: {post.title} (Day: {today_code} at {post_time})")
+                            print(f"[AutoPoster] Triggering WEEKLY_RECURRING post #{post.id}: {post.title} (Day: {today_code} at {post_time})")
                             post.refresh_from_db()
                             PublisherEngine.publish_post(post)
 
     except Exception as e:
         logger.error(f"[AutoPoster Scheduler Error] {str(e)}")
+        print(f"[AutoPoster Scheduler Error] {str(e)}")
+    finally:
+        close_old_connections()
 
 
 def start_scheduler():
@@ -95,3 +103,4 @@ def start_scheduler():
     scheduler.add_job(check_and_publish_due_posts, 'interval', seconds=30, id='auto_post_checker', replace_existing=True)
     scheduler.start()
     print("[SocialPublisher] Background Auto-Post Scheduler started successfully (Interval: 30s)")
+

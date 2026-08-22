@@ -1,5 +1,6 @@
 from datetime import datetime
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -10,6 +11,29 @@ import requests
 from .models import SocialAccount, SocialPost, SocialPostAttachment, SocialPostLog
 from .serializers import SocialAccountSerializer, SocialPostSerializer, SocialPostLogSerializer
 from .publishers import PublisherEngine, FacebookPublisher, TelegramPublisher, TikTokPublisher
+from .scheduler import check_and_publish_due_posts
+
+def make_aware_scheduled_at(val):
+    if not val:
+        return None
+    if isinstance(val, str):
+        val_clean = val.replace('T', ' ')
+        try:
+            parsed_dt = datetime.strptime(val_clean.split('.')[0], '%Y-%m-%d %H:%M:%S')
+        except Exception:
+            parsed_dt = parse_datetime(val)
+        if parsed_dt:
+            if timezone.is_naive(parsed_dt):
+                tz = timezone.get_current_timezone()
+                return timezone.make_aware(parsed_dt, tz)
+            return parsed_dt
+    elif isinstance(val, datetime):
+        if timezone.is_naive(val):
+            tz = timezone.get_current_timezone()
+            return timezone.make_aware(val, tz)
+        return val
+    return val
+
 
 class SocialAccountViewSet(viewsets.ModelViewSet):
     queryset = SocialAccount.objects.all().order_by('-created_at')
@@ -159,6 +183,13 @@ class SocialPostViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    def list(self, request, *args, **kwargs):
+        try:
+            check_and_publish_due_posts()
+        except Exception:
+            pass
+        return super().list(request, *args, **kwargs)
+
     def _process_multi_attachments(self, request, post):
         image_files = request.FILES.getlist('image_files')
         for idx, img_f in enumerate(image_files):
@@ -208,14 +239,8 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             except Exception:
                 data['account_ids'] = [data['account_ids']]
 
-        if data.get('scheduled_at') and isinstance(data['scheduled_at'], str):
-            try:
-                dt_str = data['scheduled_at']
-                parsed_dt = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
-                tz = timezone.get_current_timezone()
-                data['scheduled_at'] = timezone.make_aware(parsed_dt, tz)
-            except Exception:
-                pass
+        if data.get('scheduled_at'):
+            data['scheduled_at'] = make_aware_scheduled_at(data['scheduled_at'])
 
         return data
 
@@ -272,6 +297,93 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         post.save(update_fields=['status'])
         result = PublisherEngine.publish_post(post)
         return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='copy')
+    def copy_post(self, request, pk=None):
+        original_post = self.get_object()
+        
+        target_days = request.data.get('target_days') or request.data.get('recurring_days')
+        target_date = request.data.get('target_date') or request.data.get('scheduled_at')
+        schedule_type = request.data.get('schedule_type')
+        daily_time = request.data.get('daily_time')
+        title = request.data.get('title')
+
+        if isinstance(target_days, str):
+            try:
+                target_days = json.loads(target_days)
+            except Exception:
+                target_days = [target_days]
+
+        if not target_days and not target_date and not schedule_type:
+            schedule_type = original_post.schedule_type
+            target_days = original_post.recurring_days
+            target_date = original_post.scheduled_at
+
+        new_post = SocialPost.objects.create(
+            title=title or original_post.title,
+            content=original_post.content,
+            image_url=original_post.image_url,
+            video_url=original_post.video_url,
+            image_file=original_post.image_file,
+            video_file=original_post.video_file,
+            fb_post_type=original_post.fb_post_type,
+            tiktok_post_type=original_post.tiktok_post_type,
+            telegram_post_type=original_post.telegram_post_type,
+            platforms=original_post.platforms or [],
+            account_ids=original_post.account_ids or [],
+            schedule_type=schedule_type or original_post.schedule_type,
+            daily_time=daily_time or original_post.daily_time,
+            recurring_days=target_days if target_days is not None else (original_post.recurring_days or []),
+            is_active=original_post.is_active,
+            status='SCHEDULED' if (schedule_type or original_post.schedule_type) != 'IMMEDIATE' else 'DRAFT',
+            created_by=original_post.created_by,
+        )
+
+        if target_date:
+            new_post.scheduled_at = make_aware_scheduled_at(target_date)
+
+        if new_post.schedule_type == 'ONE_TIME' and not new_post.scheduled_at:
+            new_post.scheduled_at = timezone.now()
+
+        new_post.save()
+
+        # Copy attachments
+        for att in original_post.attachments.all():
+            SocialPostAttachment.objects.create(
+                post=new_post,
+                media_type=att.media_type,
+                file=att.file,
+                url=att.url,
+                order=att.order
+            )
+
+        return Response(self.get_serializer(new_post).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='move')
+    def move_post(self, request, pk=None):
+        post = self.get_object()
+        from_day = request.data.get('from_day')
+        target_day = request.data.get('target_day')
+        target_date = request.data.get('target_date')
+
+        if target_day:
+            if post.schedule_type == 'WEEKLY_RECURRING':
+                current_days = list(post.recurring_days or [])
+                if from_day and from_day in current_days:
+                    current_days.remove(from_day)
+                if target_day not in current_days:
+                    current_days.append(target_day)
+                post.recurring_days = current_days
+            else:
+                post.schedule_type = 'WEEKLY_RECURRING'
+                post.recurring_days = [target_day]
+        elif target_date:
+            post.schedule_type = 'ONE_TIME'
+            post.scheduled_at = make_aware_scheduled_at(target_date)
+
+        post.status = 'SCHEDULED'
+        post.save()
+        return Response(self.get_serializer(post).data, status=status.HTTP_200_OK)
 
 
 class SocialPostLogViewSet(viewsets.ReadOnlyModelViewSet):
