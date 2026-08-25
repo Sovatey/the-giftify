@@ -26,9 +26,12 @@ class SocialPostAttachmentSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_file_url(self, obj):
-        if obj.file:
-            return obj.file.url
-        return obj.url
+        url = obj.file.url if obj.file else obj.url
+        if url and not (url.startswith('http://') or url.startswith('https://')):
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(url)
+        return url
 
 
 class SocialPostSerializer(serializers.ModelSerializer):
@@ -46,10 +49,20 @@ class SocialPostSerializer(serializers.ModelSerializer):
 
     def get_image_file_url(self, obj):
         if obj.image_file:
-            return obj.image_file.url
+            url = obj.image_file.url
+            if url and not (url.startswith('http://') or url.startswith('https://')):
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(url)
+            return url
         return None
 
     def get_video_file_url(self, obj):
         if obj.video_file:
-            return obj.video_file.url
+            url = obj.video_file.url
+            if url and not (url.startswith('http://') or url.startswith('https://')):
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(url)
+            return url
         return None

@@ -17,6 +17,7 @@ import dayjs from 'dayjs';
 import Sidebar from '../sidebar';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { getImageUrl } from '../../utils/imageUrl';
 
 const { Content } = Layout;
 const { TextArea } = Input;
@@ -243,7 +244,7 @@ const SocialPublisherScreen = () => {
         uid: `att-${a.id || idx}`,
         name: `Photo ${idx + 1}`,
         status: 'done',
-        url: a.file_url || a.url
+        url: getImageUrl(a.file_url || a.url)
       }));
     } else if (record.image_file_url || record.image_url) {
       const urlCandidate = record.image_file_url || record.image_url;
@@ -252,7 +253,7 @@ const SocialPublisherScreen = () => {
           uid: '-1',
           name: 'Photo 1',
           status: 'done',
-          url: urlCandidate
+          url: getImageUrl(urlCandidate)
         }];
       }
     }
@@ -265,7 +266,7 @@ const SocialPublisherScreen = () => {
         uid: `vid-${a.id || idx}`,
         name: `Video ${idx + 1}`,
         status: 'done',
-        url: a.file_url || a.url
+        url: getImageUrl(a.file_url || a.url)
       }));
     } else if (record.video_file_url || record.video_url) {
       const urlCandidate = record.video_file_url || record.video_url;
@@ -274,7 +275,7 @@ const SocialPublisherScreen = () => {
           uid: '-2',
           name: 'Video 1',
           status: 'done',
-          url: urlCandidate
+          url: getImageUrl(urlCandidate)
         }];
       }
     }
@@ -758,7 +759,8 @@ const SocialPublisherScreen = () => {
       key: 'title',
       render: (_, record) => {
         const firstAttImage = record.attachments?.find(a => a.media_type === 'IMAGE' || (a.file_url && !a.file_url.endsWith('.mp4')))?.file_url;
-        const imgUrl = record.image_file_url || record.image_url || firstAttImage;
+        const rawImg = record.image_file_url || record.image_url || firstAttImage;
+        const imgUrl = getImageUrl(rawImg);
         const attCount = record.attachments?.length || 0;
 
         return (
@@ -1239,7 +1241,8 @@ const SocialPublisherScreen = () => {
                                 ) : (
                                   dayPosts.map((p) => {
                                     const firstAttImage = p.attachments?.find(a => a.media_type === 'IMAGE' || (a.file_url && !a.file_url.endsWith('.mp4')))?.file_url;
-                                    const imgUrl = p.image_file_url || p.image_url || firstAttImage;
+                                    const rawImg = p.image_file_url || p.image_url || firstAttImage;
+                                    const imgUrl = getImageUrl(rawImg);
 
                                     if (calendarViewMode === 'list') {
                                       return (
@@ -1995,8 +1998,8 @@ const SocialPublisherScreen = () => {
                         onClick={() => handleToggleProductSelection(prod)}
                       >
                         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                          {prod.image ? (
-                            <img src={prod.image} alt="" style={{ width: 50, height: 50, borderRadius: 8, objectFit: 'cover' }} />
+                          {prod.image || prod.display_image_url || prod.image_url ? (
+                            <img src={getImageUrl(prod.image || prod.display_image_url || prod.image_url)} alt="" style={{ width: 50, height: 50, borderRadius: 8, objectFit: 'cover' }} />
                           ) : (
                             <div style={{ width: 50, height: 50, borderRadius: 8, background: '#fff0f3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <ShoppingOutlined style={{ color: '#ff758c', fontSize: 20 }} />
