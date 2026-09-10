@@ -170,12 +170,21 @@ const SocialPublisherScreen = () => {
       message.error('Please enter your TikTok Client Key first!');
       return;
     }
+    let secret = clientSecret;
+    if (!secret || secret === 'null' || secret === 'undefined') {
+      secret = window.prompt('Please paste your TikTok Client Secret (from TikTok Developer Console):');
+      if (!secret) {
+        message.warning('TikTok Client Secret is required to authorize account.');
+        return;
+      }
+      secret = secret.trim();
+    }
     try {
       const codeVerifier = generateRandomString(50);
       const codeChallenge = await generateCodeChallenge(codeVerifier);
       sessionStorage.setItem('tiktok_code_verifier', codeVerifier);
       sessionStorage.setItem('tiktok_client_key', clientKey);
-      if (clientSecret) sessionStorage.setItem('tiktok_client_secret', clientSecret);
+      sessionStorage.setItem('tiktok_client_secret', secret);
       if (accountId) sessionStorage.setItem('tiktok_account_id', accountId);
 
       const redirectUri = overrideRedirectUri || (window.location.origin + window.location.pathname);
@@ -1971,6 +1980,7 @@ const SocialPublisherScreen = () => {
                       <Form.Item
                         name="app_id_or_bot_token"
                         label={plat === 'telegram' ? 'Telegram Bot Token' : plat === 'facebook' ? 'Facebook App ID' : 'TikTok Client Key'}
+                        rules={[{ required: plat === 'tiktok', message: 'Please enter your TikTok Client Key' }]}
                       >
                         <Input.Password placeholder={plat === 'tiktok' ? 'Enter Client key (e.g. aw...)' : 'Enter Token / App ID'} style={{ borderRadius: 10 }} />
                       </Form.Item>
@@ -1979,6 +1989,7 @@ const SocialPublisherScreen = () => {
                         <Form.Item
                           name="app_secret_or_client_secret"
                           label={plat === 'tiktok' ? 'TikTok Client Secret' : 'Facebook App Secret'}
+                          rules={[{ required: plat === 'tiktok', message: 'Please enter your TikTok Client Secret' }]}
                         >
                           <Input.Password placeholder={plat === 'tiktok' ? 'Enter Client secret from TikTok Developer console...' : 'Enter App Secret...'} style={{ borderRadius: 10 }} />
                         </Form.Item>
