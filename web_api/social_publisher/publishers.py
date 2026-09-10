@@ -6,7 +6,7 @@ from .models import SocialAccount, SocialPost, SocialPostLog
 
 from django.conf import settings
 
-DEFAULT_BASE_DOMAIN = os.environ.get('BASE_DOMAIN', 'http://127.0.0.1:8000')
+DEFAULT_BASE_DOMAIN = os.environ.get('BASE_DOMAIN', 'https://the-giftify.vercel.app')
 
 IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')
 VIDEO_EXTENSIONS = ('.mp4', '.mov', '.avi', '.mkv', '.webm')
@@ -391,8 +391,20 @@ class TikTokPublisher:
                 "Content-Type": "application/json; charset=UTF-8"
             }
 
-            image_urls = [item['url'] for item in image_items if item.get('url')]
-            video_urls = [item['url'] for item in video_items if item.get('url')]
+            public_domain = os.environ.get('BASE_DOMAIN', 'https://the-giftify.vercel.app')
+
+            def make_public_url(raw_url):
+                if not raw_url:
+                    return ""
+                if '127.0.0.1' in raw_url or 'localhost' in raw_url:
+                    parts = raw_url.split('/media/')
+                    if len(parts) > 1:
+                        return f"{public_domain}/media/{parts[-1]}"
+                    return raw_url.replace('http://127.0.0.1:8000', public_domain).replace('http://localhost:8000', public_domain)
+                return raw_url
+
+            image_urls = [make_public_url(item['url']) for item in image_items if item.get('url')]
+            video_urls = [make_public_url(item['url']) for item in video_items if item.get('url')]
 
             if post_type == 'PHOTO_CAROUSEL' or (len(image_urls) > 0 and not video_urls):
                 url = "https://open.tiktokapis.com/v2/post/publish/content/init/"
@@ -412,6 +424,7 @@ class TikTokPublisher:
                 }
             else:
                 target_video_url = video_urls[0] if video_urls else (image_urls[0] if image_urls else "")
+
                 url = "https://open.tiktokapis.com/v2/post/publish/video/init/"
                 body = {
                     "post_info": {
@@ -460,6 +473,8 @@ class TikTokPublisher:
                 }
             else:
                 err_msg = res_data.get('error', {}).get('message', response.text)
+                if 'URL ownership verification' in err_msg or 'pull_from_url' in err_msg:
+                    err_msg = "TikTok domain verification required: Please add your web domain (e.g. your PythonAnywhere URL) to your TikTok Developer Console under App Details -> Web domain / Domain Verification."
                 return {
                     'success': False,
                     'external_id': None,
