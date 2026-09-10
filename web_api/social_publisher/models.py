@@ -19,6 +19,7 @@ class SocialAccount(models.Model):
     platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES)
     name = models.CharField(max_length=255, help_text="Account/Channel Name")
     app_id_or_bot_token = models.CharField(max_length=500, blank=True, null=True, help_text="App ID / Bot Token")
+    app_secret_or_client_secret = models.CharField(max_length=500, blank=True, null=True, help_text="App Secret / Client Secret")
     page_id_or_chat_id = models.CharField(max_length=255, blank=True, null=True, help_text="Facebook Page ID / Telegram Chat ID / TikTok User ID")
     access_token = models.TextField(blank=True, null=True, help_text="OAuth / Page Access Token")
     is_active = models.BooleanField(default=True)

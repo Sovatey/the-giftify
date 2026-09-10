@@ -124,20 +124,31 @@ const SocialPublisherScreen = () => {
     const code = urlParams.get('code');
     if (code) {
       const codeVerifier = sessionStorage.getItem('tiktok_code_verifier');
+      const clientKey = sessionStorage.getItem('tiktok_client_key');
+      const clientSecret = sessionStorage.getItem('tiktok_client_secret');
+      const accountId = sessionStorage.getItem('tiktok_account_id');
+      const redirectUri = sessionStorage.getItem('tiktok_redirect_uri') || (window.location.origin + window.location.pathname);
+
       if (codeVerifier) {
         setIsConnectingTikTok(true);
         message.loading({ content: 'Authenticating with TikTok...', key: 'tiktok_auth' });
         try {
-          const redirectUri = (window.location.origin + window.location.pathname).replace('localhost', '127.0.0.1');
           const res = await api.post('/social/accounts/tiktok-token-exchange/', {
             code,
             code_verifier: codeVerifier,
+            client_key: clientKey,
+            client_secret: clientSecret,
+            account_id: accountId,
             redirect_uri: redirectUri
           });
 
           if (res.data.success) {
             message.success({ content: 'TikTok account connected successfully! 🚀', key: 'tiktok_auth' });
             sessionStorage.removeItem('tiktok_code_verifier');
+            sessionStorage.removeItem('tiktok_client_key');
+            sessionStorage.removeItem('tiktok_client_secret');
+            sessionStorage.removeItem('tiktok_account_id');
+            sessionStorage.removeItem('tiktok_redirect_uri');
             window.history.replaceState({}, document.title, window.location.pathname);
             fetchData();
           } else {
@@ -154,7 +165,7 @@ const SocialPublisherScreen = () => {
   };
 
   // Launch TikTok 1-Click OAuth Authorization with PKCE
-  const startTikTokOAuth = async (clientKey) => {
+  const startTikTokOAuth = async (clientKey, clientSecret = '', accountId = '', overrideRedirectUri = '') => {
     if (!clientKey) {
       message.error('Please enter your TikTok Client Key first!');
       return;
@@ -163,12 +174,17 @@ const SocialPublisherScreen = () => {
       const codeVerifier = generateRandomString(50);
       const codeChallenge = await generateCodeChallenge(codeVerifier);
       sessionStorage.setItem('tiktok_code_verifier', codeVerifier);
+      sessionStorage.setItem('tiktok_client_key', clientKey);
+      if (clientSecret) sessionStorage.setItem('tiktok_client_secret', clientSecret);
+      if (accountId) sessionStorage.setItem('tiktok_account_id', accountId);
 
-      const currentHost = window.location.origin.replace('localhost', '127.0.0.1');
-      const redirectUri = encodeURIComponent(currentHost + window.location.pathname);
+      const redirectUri = overrideRedirectUri || (window.location.origin + window.location.pathname);
+      sessionStorage.setItem('tiktok_redirect_uri', redirectUri);
+
+      const encodedRedirectUri = encodeURIComponent(redirectUri);
       const scope = encodeURIComponent('user.info.basic,video.publish,video.upload');
 
-      const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${clientKey}&response_type=code&scope=${scope}&redirect_uri=${redirectUri}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+      const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${clientKey}&response_type=code&scope=${scope}&redirect_uri=${encodedRedirectUri}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
 
       window.location.href = authUrl;
     } catch (err) {
@@ -1550,7 +1566,7 @@ const SocialPublisherScreen = () => {
                                     type="primary"
                                     icon={<KeyOutlined />}
                                     style={{ marginBottom: 10, borderRadius: 8, background: '#000000', borderColor: '#000000', fontSize: 12 }}
-                                    onClick={() => startTikTokOAuth(acc.app_id_or_bot_token)}
+                                    onClick={() => startTikTokOAuth(acc.app_id_or_bot_token, acc.app_secret_or_client_secret, acc.id)}
                                   >
                                     🔑 Connect TikTok (OAuth)
                                   </Button>
@@ -1934,20 +1950,66 @@ const SocialPublisherScreen = () => {
                 />
               </Form.Item>
 
-              <Form.Item name="name" label="Account Display Name (e.g. Telegram Wholesale Group)" rules={[{ required: true }]}>
-                <Input placeholder="e.g. Telegram Group A - Wholesale" style={{ borderRadius: 10 }} />
+              <Form.Item name="name" label="Account Display Name" rules={[{ required: true }]}>
+                <Input placeholder="e.g. Official TikTok Channel" style={{ borderRadius: 10 }} />
               </Form.Item>
 
-              <Form.Item name="page_id_or_chat_id" label="Facebook Page ID / Telegram Chat ID / TikTok User ID" rules={[{ required: true }]}>
-                <Input placeholder="e.g. -1004974140086 or @group_handle" style={{ borderRadius: 10 }} />
-              </Form.Item>
+              <Form.Item noStyle shouldUpdate={(prev, curr) => prev.platform !== curr.platform}>
+                {({ getFieldValue }) => {
+                  const plat = getFieldValue('platform');
+                  const currentRedirectUri = (window.location.origin + window.location.pathname);
+                  return (
+                    <>
+                      <Form.Item
+                        name="page_id_or_chat_id"
+                        label={plat === 'telegram' ? 'Telegram Chat ID / Group Handle' : plat === 'facebook' ? 'Facebook Page ID' : 'TikTok User ID / Open ID (Optional)'}
+                        rules={[{ required: plat !== 'tiktok', message: 'This field is required' }]}
+                      >
+                        <Input placeholder={plat === 'telegram' ? 'e.g. -1004974140086 or @group_handle' : plat === 'facebook' ? 'e.g. 1092837465' : 'Auto-filled after TikTok login'} style={{ borderRadius: 10 }} />
+                      </Form.Item>
 
-              <Form.Item name="app_id_or_bot_token" label="Telegram Bot Token / TikTok Client Key">
-                <Input.Password placeholder="Enter Bot Token or TikTok Client Key..." style={{ borderRadius: 10 }} />
-              </Form.Item>
+                      <Form.Item
+                        name="app_id_or_bot_token"
+                        label={plat === 'telegram' ? 'Telegram Bot Token' : plat === 'facebook' ? 'Facebook App ID' : 'TikTok Client Key'}
+                      >
+                        <Input.Password placeholder={plat === 'tiktok' ? 'Enter Client key (e.g. aw...)' : 'Enter Token / App ID'} style={{ borderRadius: 10 }} />
+                      </Form.Item>
 
-              <Form.Item name="access_token" label="OAuth / Page Access Token">
-                <TextArea rows={3} placeholder="Paste long-lived access token here..." style={{ borderRadius: 10 }} />
+                      {(plat === 'tiktok' || plat === 'facebook') && (
+                        <Form.Item
+                          name="app_secret_or_client_secret"
+                          label={plat === 'tiktok' ? 'TikTok Client Secret' : 'Facebook App Secret'}
+                        >
+                          <Input.Password placeholder={plat === 'tiktok' ? 'Enter Client secret from TikTok Developer console...' : 'Enter App Secret...'} style={{ borderRadius: 10 }} />
+                        </Form.Item>
+                      )}
+
+                      {plat === 'tiktok' && (
+                        <div style={{ background: '#fffbe6', border: '1px solid #ffe58f', padding: '14px 16px', borderRadius: 12, marginBottom: 16 }}>
+                          <div style={{ fontWeight: 700, color: '#d46b08', marginBottom: 6, fontSize: 13 }}>⚠️ Important: TikTok Redirect URI Configuration</div>
+                          <div style={{ fontSize: 12, color: '#595959', lineHeight: 1.6 }}>
+                            TikTok requires the <b>Redirect URI</b> sent by our app to match <b>EXACTLY</b> what is saved in your TikTok Developer Portal under <b>Redirect domains / Callback URLs</b>.
+                          </div>
+                          <div style={{ marginTop: 8, padding: '8px 10px', background: '#ffffff', borderRadius: 8, border: '1px dashed #ffd591', fontSize: 12 }}>
+                            <b>Your Current App Redirect URI:</b><br />
+                            <code style={{ color: '#d4380d', fontWeight: 'bold', fontSize: 13 }}>{currentRedirectUri}</code>
+                          </div>
+                          <ol style={{ margin: '10px 0 0 0', paddingLeft: 18, fontSize: 12, color: '#595959' }}>
+                            <li>Go to <a href="https://developers.tiktok.com/" target="_blank" rel="noreferrer">TikTok Developer Center</a> &rarr; Your App (<b>The Giftify</b>) &rarr; App Details.</li>
+                            <li>In the <b>Redirect domains / Callback URLs</b> section, add:<br />
+                              <code style={{ background: '#fff', padding: '2px 6px', borderRadius: 4, color: '#1890ff', fontWeight: 700 }}>{currentRedirectUri}</code>
+                            </li>
+                            <li>Save changes in TikTok Developer Portal, then click <b>🔑 Connect TikTok (OAuth)</b>!</li>
+                          </ol>
+                        </div>
+                      )}
+
+                      <Form.Item name="access_token" label="OAuth Access Token (Auto-filled via OAuth or Manual)">
+                        <TextArea rows={3} placeholder="Access Token auto-fills after 1-Click login or paste here manually..." style={{ borderRadius: 10 }} />
+                      </Form.Item>
+                    </>
+                  );
+                }}
               </Form.Item>
 
               <Form.Item name="is_simulated" valuePropName="checked">

@@ -126,11 +126,14 @@ class SocialAccountViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
         acc = None
         if account_id:
             acc = SocialAccount.objects.filter(id=account_id).first()
+        if not acc and client_key:
+            acc = SocialAccount.objects.filter(platform='tiktok', app_id_or_bot_token=client_key).first()
         if not acc:
             acc = SocialAccount.objects.filter(platform='tiktok').first()
 
         if acc:
             client_key = client_key or acc.app_id_or_bot_token
+            client_secret = client_secret or acc.app_secret_or_client_secret
 
         if not client_key:
             return Response({'success': False, 'message': 'TikTok Client Key not set'}, status=status.HTTP_400_BAD_REQUEST)
@@ -158,13 +161,32 @@ class SocialAccountViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
                         platform='tiktok',
                         name='Official TikTok Account',
                         app_id_or_bot_token=client_key,
+                        app_secret_or_client_secret=client_secret or '',
                         is_simulated=False,
                         is_active=True
                     )
+                else:
+                    acc.app_id_or_bot_token = client_key
+                    if client_secret:
+                        acc.app_secret_or_client_secret = client_secret
+                
                 acc.access_token = access_token
                 if open_id:
                     acc.page_id_or_chat_id = open_id
                 acc.is_simulated = False
+
+                # Try to fetch user info to auto-name the account
+                try:
+                    user_url = "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,display_name,avatar_url"
+                    u_res = requests.get(user_url, headers={'Authorization': f'Bearer {access_token}'}, timeout=10)
+                    u_data = u_res.json()
+                    if u_res.status_code == 200 and 'data' in u_data:
+                        disp_name = u_data.get('data', {}).get('user', {}).get('display_name')
+                        if disp_name:
+                            acc.name = disp_name
+                except Exception:
+                    pass
+
                 acc.save()
 
                 return Response({
