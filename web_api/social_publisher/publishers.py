@@ -394,7 +394,8 @@ class TikTokPublisher:
             image_urls = [item['url'] for item in image_items if item.get('url')]
             video_urls = [item['url'] for item in video_items if item.get('url')]
 
-            if post_type == 'PHOTO_CAROUSEL' or len(image_urls) > 1:
+            if post_type == 'PHOTO_CAROUSEL' or (len(image_urls) > 0 and not video_urls):
+                url = "https://open.tiktokapis.com/v2/post/publish/content/init/"
                 body = {
                     "post_info": {
                         "title": post.title[:150],
@@ -411,6 +412,7 @@ class TikTokPublisher:
                 }
             else:
                 target_video_url = video_urls[0] if video_urls else (image_urls[0] if image_urls else "")
+                url = "https://open.tiktokapis.com/v2/post/publish/video/init/"
                 body = {
                     "post_info": {
                         "title": post.title[:150],
@@ -422,13 +424,32 @@ class TikTokPublisher:
                     "source_info": {
                         "source": "PULL_FROM_URL",
                         "video_url": target_video_url
-                    },
-                    "post_mode": "DIRECT_POST",
-                    "media_type": "VIDEO"
+                    }
                 }
             
             response = requests.post(url, headers=headers, json=body, timeout=15)
             res_data = response.json()
+
+            # Smart Fallback for TikTok Video if video/init/ returns error
+            if response.status_code != 200 and 'publish_id' not in res_data.get('data', {}) and post_type != 'PHOTO_CAROUSEL':
+                fallback_url = "https://open.tiktokapis.com/v2/post/publish/content/init/"
+                fallback_body = {
+                    "post_info": {
+                        "title": post.title[:150],
+                        "privacy_level": "PUBLIC_TO_EVERYONE",
+                    },
+                    "source_info": {
+                        "source": "PULL_FROM_URL",
+                        "video_url": target_video_url
+                    },
+                    "post_mode": "MEDIA_UPLOAD",
+                    "media_type": "VIDEO"
+                }
+                fb_res = requests.post(fallback_url, headers=headers, json=fallback_body, timeout=15)
+                fb_data = fb_res.json()
+                if fb_res.status_code == 200 and fb_data.get('data', {}).get('publish_id'):
+                    response = fb_res
+                    res_data = fb_data
             
             if response.status_code == 200 and res_data.get('data', {}).get('publish_id'):
                 pub_id = res_data['data']['publish_id']
