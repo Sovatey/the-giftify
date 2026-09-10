@@ -398,7 +398,7 @@ class TikTokPublisher:
                 body = {
                     "post_info": {
                         "title": post.title[:150],
-                        "description": post.content,
+                        "description": post.content or '',
                         "privacy_level": "PUBLIC_TO_EVERYONE",
                     },
                     "source_info": {
@@ -406,9 +406,11 @@ class TikTokPublisher:
                         "photo_cover_index": 1,
                         "photo_images": image_urls
                     },
-                    "post_mode": "MEDIA_UPLOAD"
+                    "post_mode": "MEDIA_UPLOAD",
+                    "media_type": "PHOTO"
                 }
             else:
+                target_video_url = video_urls[0] if video_urls else (image_urls[0] if image_urls else "")
                 body = {
                     "post_info": {
                         "title": post.title[:150],
@@ -419,8 +421,10 @@ class TikTokPublisher:
                     },
                     "source_info": {
                         "source": "PULL_FROM_URL",
-                        "video_url": video_urls[0] if video_urls else image_urls[0] if image_urls else ""
-                    }
+                        "video_url": target_video_url
+                    },
+                    "post_mode": "DIRECT_POST",
+                    "media_type": "VIDEO"
                 }
             
             response = requests.post(url, headers=headers, json=body, timeout=15)
